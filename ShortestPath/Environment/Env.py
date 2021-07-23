@@ -19,6 +19,8 @@ class Graph:
         self.arcs = self.distances > 1e-5
         self.num_arcs = int(self.arcs.sum())
         self.xi_dim = self.num_arcs
+        self.x_dim = self.num_arcs
+        self.y_dim = self.num_arcs
         self.gamma = self.gamma_perc * self.num_arcs
         self.arcs_array = np.array([[i, j] for i in np.arange(self.N) for j in np.arange(self.N) if self.arcs[i, j]])
         self.distances_array = np.array([self.distances[i, j] for i, j in self.arcs_array])
@@ -52,8 +54,7 @@ class Graph:
         plt.close()
         return plt
 
-    def plot_graph_solutions(self, K, y, tau, x=None, tmp=False, it=0, svm_bound=False, vor_bound=False, extra=False,
-                             decomp=False, feas=False, obj=False, scen=False, att=False):
+    def plot_graph_solutions(self, K, y, tau, x=None, tmp=False, it=0, alg_type="rand"):
         arcs = self.arcs
         sns.set()
         sns.set_style("whitegrid")
@@ -100,68 +101,11 @@ class Graph:
         plt.ylim(0, 10)
 
         if tmp:
-            if svm_bound:
-                plt.savefig("Results/Plots/tmp_svm_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            elif extra:
-                plt.savefig("Results/Plots/tmp_extra_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            elif vor_bound:
-                plt.savefig("Results/Plots/tmp_vor_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            elif decomp:
-                plt.savefig("Results/Plots/tmp_decomp_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            elif feas:
-                plt.savefig("Results/Plots/tmp_feas_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            elif obj:
-                plt.savefig("Results/Plots/tmp_obj_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            elif scen:
-                plt.savefig("Results/Plots/tmp_scen_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            elif att:
-                plt.savefig("Results/Plots/tmp_att_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
-            else:
-                plt.savefig("Results/Plots/tmp_graph_K{}_N{}_inst{}_it{}".format(K, self.N, self.inst_num, it))
+            plt.savefig(f"Results/Plots/tmp_graph_{alg_type}_K{K}_N{self.N}_inst{self.inst_num}_it{it}")
         else:
-            plt.savefig("Results/Plots/final_graph_K{}_N{}_inst{}".format(K, self.N, self.inst_num))
-            plt.savefig("Results/Plots/final_graph_K{}_N{}_inst{}.pdf".format(K, self.N, self.inst_num))
-
+            plt.savefig(f"Results/Plots/final_graph_{alg_type}_K{K}_N{self.N}_inst{self.inst_num}")
+            plt.savefig(f"Results/Plots/final_graph_{alg_type}_K{K}_N{self.N}_inst{self.inst_num}.pdf")
         plt.close()
-
-    def adaptive_range(self, K, tau=None, xi=None):
-        N = self.N
-        # find tau for all scenarios
-        if tau is not None:
-            tau_matrix = np.array([tau[k] for k in np.arange(K) if tau[k]])[:, 0, :]
-        else:
-            tau_matrix = np.vstack([self.tau_matrix, xi])
-        self.tau_matrix = tau_matrix
-        tau_all = np.max(tau_matrix, axis=0)
-        # change distance matrix
-        new_distances_array = self.distances_array*(1 + 1/2*tau_all)
-        new_distances = copy.deepcopy(self.distances)
-        for a in np.arange(self.num_arcs):
-            new_distances[self.arcs_array[a][0], self.arcs_array[a][1]] = new_distances_array[a]
-        # dijkstra on arcs, with node s=0 and t=N
-        # initialize stuff
-        tmp_bigM = 10**2
-        dist = np.array([0, *np.ones(N-1)*tmp_bigM], dtype=np.float)
-        Q = list(np.arange(N))
-        prev = dict()
-        # algorithm
-        connected = False
-        while Q and not connected:
-            i = Q[np.argmin(dist[Q])]
-            Q.remove(i)
-
-            for j in np.arange(N):
-                if self.arcs[i, j] < 1e-5:
-                    continue
-                alt = dist[i] + new_distances[i, j]
-                if alt < dist[j]:
-                    if j == N - 1:
-                        connected = True
-                    dist[j] = alt
-                    prev[j] = i
-        inside_range = np.where(dist < self.max_first_stage)[0]
-        # outside_range = [i for i in np.arange(self.N) if i not in inside_range]
-        return inside_range
 
     @staticmethod
     def shortest_path(self, range_used=False):

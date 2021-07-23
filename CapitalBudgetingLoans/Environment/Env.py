@@ -17,6 +17,8 @@ class ProjectsInstance:
         self.lam = 0.12
         self.mu = 1.2
         self.xi_dim = xi_dim
+        self.x_dim = self.N
+        self.y_dim = self.N
         self.inst_num = inst_num
         self.init_uncertainty = np.zeros(self.xi_dim)
 
