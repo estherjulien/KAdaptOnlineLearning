@@ -1,5 +1,6 @@
 from KAdaptabilityAlgorithm.Attributes import algorithm as algorithm_att
 from KAdaptabilityAlgorithm.Random import algorithm as algorithm_random
+from KAdaptabilityAlgorithm.Attributes_online_learning import algorithm_main as algorithm_online
 from ShortestPath.Environment.Env import Graph
 from joblib import Parallel, delayed
 import numpy as np
@@ -7,7 +8,7 @@ import pickle
 
 num_cores = 8
 num_instances = int(num_cores)
-N = 100
+N = 50
 try:
     with open(f"Results/Instances/env_list_sp_N{N}_{num_instances}.pickle", "rb") as handle:
         env_list = pickle.load(handle)
@@ -24,16 +25,16 @@ algorithm = [algorithm_random, algorithm_att]
 att_series = ["coords", "static", "static_obj", "static_y", "nominal", "nominal_obj", "nominal_x", "nominal_y"]
 problem_type = f"sp_2s_K{K}_N{N}_csn"
 
-# results = algorithm_att(K, env_list[0],
-#                             att_series=att_series,
-#                             time_limit=time_limit,
-#                             print_info=True,
-#                             problem_type=problem_type)
+results = algorithm_online(K, env_list[0],
+                            att_series=att_series,
+                            time_limit=time_limit[0],
+                            print_info=True,
+                            problem_type=problem_type)
 
-results = Parallel(n_jobs=num_cores)(delayed(algorithm[a])(K, env,
-                                                        att_series=att_series,
-                                                        time_limit=time_limit[a],
-                                                        print_info=True,
-                                                        problem_type=problem_type)
-                                                        for env in env_list
-                                                        for a in [0, 1])
+# results = Parallel(n_jobs=num_cores)(delayed(algorithm[a])(K, env,
+#                                                         att_series=att_series,
+#                                                         time_limit=time_limit[a],
+#                                                         print_info=True,
+#                                                         problem_type=problem_type)
+#                                                         for env in env_list
+#                                                         for a in [0, 1])

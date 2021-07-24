@@ -11,7 +11,7 @@ import time
 
 
 def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, sign_lev=.1, weight_group=False,
-                   time_limit=20*60, print_info=False):
+                   time_limit=20*60, print_info=False, problem_type="test"):
     thread_count = 8
     # Initialize
     N_set = [{k: [] for k in np.arange(K)}]
@@ -48,7 +48,6 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, sign_lev=.1, weight_gr
     if "coords" in att_series:
         num_att += env.xi_dim
     if "nominal" in att_series:
-        scen_nom_model = scenario_fun_nominal_build(env)
         if "nominal_obj" in att_series:
             num_att += 1
         if "nominal_x" in att_series:
@@ -59,7 +58,6 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, sign_lev=.1, weight_gr
         scen_nom_model = None
     if "static" in att_series:
         x_static = static_solution_rc(env)
-        scen_stat_model = scenario_fun_static_build(env, x_static)
         if "static_obj" in att_series:
             num_att += 1
         if "static_y" in att_series:
@@ -69,27 +67,39 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, sign_lev=.1, weight_gr
         scen_stat_model = None
 
     # initialize weights (all 1)
-    weights = np.zeros(num_att)
+    weights = np.ones(num_att)
+
+    print("Instance AO {} started at {}".format(env.inst_num, now))
+
+    # todo: finish this online learning part
     while time.time() - start_time < time_limit:
         # RANDOM NODE RUNS
-        rand_run_num = np.floor(thread_count*lr_t)
-        results_rand = Parallel(n_jobs=thread_count)(delayed(run_random)(K, env, N_set[n],
-                                                                         start_time=time.time() - start_time)
-                                                     for n in np.arange(rand_run_num))
+        rand_run_num = int(np.floor(thread_count*lr_t))
+        # results = run_random(K, env, N_set[0], theta_i)
+        results_rand = Parallel(n_jobs=thread_count)(delayed(run_random)(K, env, N_set[n], theta_i)
+                                                     for n in np.arange(min(rand_run_num, len(N_set))))
         # delete random nodes
         del N_set[:rand_run_num]
         # analyze random nodes
-
+        theta_rand = []
+        num_nodes = []
+        robust = []
+        tau_rand = []
+        for results in results_rand:
+            theta_rand.append(results["theta"])
+            num_nodes.append(results["num_nodes"])
+            robust.append(results["robust"])
         # append new taus to N_set
         # change weights
-        weights = update_weights()
+        # if not weight_group:
+        #     weights = update_weights(K, env, weights, tau_rand, df_att, lr_w, att_series)
+        # else:
+        #     pass
         # ATTRIBUTE NODE RUNS
         att_run_num = thread_count - rand_run_num
-        results_att = Parallel(n_jobs=thread_count)(delayed(run_att)(K, env, N_set[n], theta_i, att_series, weights,
-                                                                     start_time=time.time() - start_time,
-                                                                     scen_nom_model=scen_nom_model,
-                                                                     sen_stat_model=scen_stat_model,
-                                                                     x_static=x_static) for n in att_run_num)
+        results_att = run_att(K, env, N_set[0], theta_i, att_series, weights, x_static=x_static)
+        # results_att = Parallel(n_jobs=thread_count)(delayed(run_att)(K, env, N_set[n], theta_i, att_series, weights,
+        #                                                              x_static=x_static) for n in att_run_num)
         # delete att nodes
         del N_set[:att_run_num]
         # analyze att nodes
@@ -134,12 +144,13 @@ def update_weights(K, env, init_weights, tau_rand, df_att, lr_w, att_series):
     X_rand = X_rand.drop("subset", axis=1)
 
     # update weights
-    weights = None
+    weights = init_weights + lr_w*(X_att*(init_weights*X_att - X_rand))
+
     return weights
 
 
-def run_random(K, env, tau, theta_i, scen_model_init,
-               time_limit=20*60, start_time=0):
+def run_random(K, env, tau, theta_i, scen_model_init=None,
+               time_limit=20*60):
     # initialize
     mp_time = 0
     sp_time = 0
@@ -147,14 +158,20 @@ def run_random(K, env, tau, theta_i, scen_model_init,
 
     xi_new = None
     k_new = None
-
+    start_time = time.time()
     while time.time() - start_time < time_limit:
         # MASTER PROBLEM
         if xi_new is None:
             start_mp = time.time()
-            theta, x, y, model = scenario_fun_build(K, tau, env, scen_model_init)
+            theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
         else:
+            # make new tau
+            tau = copy.deepcopy(tau)
+            adj_tau_k = copy.deepcopy(tau[k_new])
+            adj_tau_k.append(xi_new)
+            tau[k_new] = adj_tau_k
+            # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_update(K, k_new, xi_new, env, model)
             mp_time += time.time() - start_mp
@@ -183,21 +200,21 @@ def run_random(K, env, tau, theta_i, scen_model_init,
         k_new = np.random.randint(len(K_set))
 
         for k in K_set:
+            if k == k_new:
+                continue
             tau_tmp = copy.deepcopy(tau)
             adj_tau_k = copy.deepcopy(tau_tmp[k])
             adj_tau_k.append(xi_new)
             tau_tmp[k] = adj_tau_k
-            if k == k_new:
-                tau = copy.copy(tau_tmp)
-            else:
-                N_set.append(tau_tmp)
+            N_set.append(tau_tmp)
 
     num_nodes = sum([len(t) for t in tau.values()])
     return {"theta": theta, "x": x, "y": y, "tau": tau, "robust": robust_bool, "num_nodes": num_nodes, "N_set": N_set,
             "mp_time": mp_time, "sp_time": sp_time}
 
 
-def run_att(K, env, tau, att_series, theta_i, weights, scen_model_init,
+def run_att(K, env, tau, att_series, theta_i, weights, scen_model_init=None,
+            scen_nom_model=None, scen_stat_model=None, x_static=None,
             start_time=0, time_limit=20*60):
     # initialize
     mp_time = 0
@@ -205,15 +222,28 @@ def run_att(K, env, tau, att_series, theta_i, weights, scen_model_init,
     att_time = 0
     N_set = []
 
+    if "nominal" in att_series:
+        scen_nom_model = scenario_fun_nominal_build(env)
+    else:
+        scen_nom_model = None
+    if "static" in att_series:
+        scen_stat_model = scenario_fun_static_build(env, x_static)
+    else:
+        x_static = None
+        scen_stat_model = None
+
     xi_new = None
     k_new = None
-
+    start_time = time.time()
     # initialize df_att
     df_att = pd.DataFrame()
     i = 0
     for k in np.arange(K):
         for scen in tau[k]:
-            new_scen_att = attribute_per_scen(scen, env, att_series)
+            new_scen_att = attribute_per_scen(scen, env, att_series,
+                                              scen_nom_model=scen_nom_model,
+                                              scen_stat_model=scen_stat_model,
+                                              x_static=x_static)
             try:
                 df_att.iloc[i] = attribute_per_scen(scen, env, att_series)
             except IndexError:
@@ -227,9 +257,15 @@ def run_att(K, env, tau, att_series, theta_i, weights, scen_model_init,
         # MASTER PROBLEM
         if xi_new is None:
             start_mp = time.time()
-            theta, x, y, model = scenario_fun_build(K, tau, env, scen_model_init)
+            theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
         else:
+            # make new tau
+            tau = copy.deepcopy(tau)
+            adj_tau_k = copy.deepcopy(tau[k_new])
+            adj_tau_k.append(xi_new)
+            tau[k_new] = adj_tau_k
+            # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_update(K, k_new, xi_new, env, model)
             mp_time += time.time() - start_mp
@@ -248,7 +284,10 @@ def run_att(K, env, tau, att_series, theta_i, weights, scen_model_init,
         else:
             # ATTRIBUTES PER SCENARIO
             start_att = time.time()
-            scen_att_new = attribute_per_scen(xi_new, env, att_series)
+            scen_att_new = attribute_per_scen(xi_new, env, att_series,
+                                              scen_nom_model=scen_nom_model,
+                                              scen_stat_model=scen_stat_model,
+                                              x_static=x_static)
             att_time += time.time() - start_att
 
         # choose k_new and add other tau's to N_set
@@ -273,14 +312,13 @@ def run_att(K, env, tau, att_series, theta_i, weights, scen_model_init,
         att_time += time.time() - start_att
 
         for k in K_set:
+            if k == k_new:
+                continue
             tau_tmp = copy.deepcopy(tau)
             adj_tau_k = copy.deepcopy(tau_tmp[k])
             adj_tau_k.append(xi_new)
             tau_tmp[k] = adj_tau_k
-            if k == k_new:
-                tau = copy.copy(tau_tmp)
-            else:
-                N_set.append(tau_tmp)
+            N_set.append(tau_tmp)
 
     num_nodes = sum([len(t) for t in tau.values()])
     return {"theta": theta, "x": x, "y": y, "tau": tau, "df_att": df_att, "robust": robust_bool,

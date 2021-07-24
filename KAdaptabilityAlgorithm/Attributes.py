@@ -41,10 +41,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
     now = datetime.now().time()
     xi_new, k_new = None, None
 
-    print("Instance K {} started at {}".format(env.inst_num, now))
-
-    # initialize scenario model
-    scen_model_init = scenario_fun_init(K, env)
+    print("Instance A {} started at {}".format(env.inst_num, now))
 
     if "nominal" in att_series:
         scen_nom_model = scenario_fun_nominal_build(env)
@@ -64,7 +61,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
             tau = N_set.pop(0)
             # master problem
             start_mp = time.time()
-            theta, x, y, model = scenario_fun_build(K, tau, env, scen_model_init)
+            theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
 
             # initialize df_att
@@ -110,7 +107,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
         if zeta <= 1e-04:
             if print_info:
                 now = datetime.now().time()
-                print("Instance K {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
+                print("Instance A {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
                     env.inst_num, iteration, np.round(time.time()-start_time, 3), now, np.round(theta, 4), [len(t) for t in tau.values()], prune_count))
             theta_i, x_i, y_i = (copy.deepcopy(theta), copy.deepcopy(x), copy.deepcopy(y))
             tau_i = copy.deepcopy(tau)
@@ -189,7 +186,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
     cum_tot_nodes[runtime] = tot_nodes
 
     now = datetime.now().time()
-    print("Instance K {} completed at {}, solved in {} minutes".format(env.inst_num, now, runtime/60))
+    print("Instance A {} completed at {}, solved in {} minutes".format(env.inst_num, now, runtime/60))
     results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                 "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time}
 

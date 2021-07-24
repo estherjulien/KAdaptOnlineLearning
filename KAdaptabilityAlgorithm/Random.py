@@ -41,8 +41,6 @@ def algorithm(K, env, att_series=None,
     xi_new, k_new = None, None
 
     print("Instance R {} started at {}".format(env.inst_num, now))
-    # initialize scenario model
-    scen_model_init = scenario_fun_init(K, env)
     while N_set and time.time() - start_time < time_limit:
         # MASTER PROBLEM
         if xi_new is None:
@@ -50,7 +48,7 @@ def algorithm(K, env, att_series=None,
             tau = N_set.pop(0)
             # master problem
             start_mp = time.time()
-            theta, x, y, model = scenario_fun_build(K, tau, env, scen_model_init)
+            theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
 
         else:
