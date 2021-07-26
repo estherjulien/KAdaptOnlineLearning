@@ -37,6 +37,16 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, sign_lev=.1, weight_gr
     mp_time = 0
     sp_time = 0
     att_time = 0
+    # store per random node
+    theta_rand = []
+    num_nodes_rand = []
+    robust_rand = []
+    tau_rand = []
+    # store per att node
+    theta_att = []
+    num_nodes_att = []
+    robust_att = []
+    df_att_list = []
     # initialization of lower and upper bounds
     theta_i, x_i, y_i = (env.upper_bound, [], [])
     inc_lb = dict()
@@ -46,65 +56,147 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, sign_lev=.1, weight_gr
 
     num_att = 0
     if "coords" in att_series:
-        num_att += env.xi_dim
+        if weight_group:
+            num_att += 1
+        else:
+            num_att += env.xi_dim
     if "nominal" in att_series:
         if "nominal_obj" in att_series:
             num_att += 1
         if "nominal_x" in att_series:
-            num_att += env.x_dim
+            if weight_group:
+                num_att += 1
+            else:
+                num_att += env.x_dim
         if "nominal_y" in att_series:
-            num_att += env.y_dim
-    else:
-        scen_nom_model = None
+            if weight_group:
+                num_att += 1
+            else:
+                num_att += env.y_dim
     if "static" in att_series:
         x_static = static_solution_rc(env)
         if "static_obj" in att_series:
             num_att += 1
         if "static_y" in att_series:
-            num_att += env.y_dim
+            if weight_group:
+                num_att += 1
+            else:
+                num_att += env.y_dim
     else:
         x_static = None
-        scen_stat_model = None
+        pass
 
     # initialize weights (all 1)
     weights = np.ones(num_att)
 
     print("Instance AO {} started at {}".format(env.inst_num, now))
 
-    # todo: finish this online learning part
+    # todo: finish online learning
     while time.time() - start_time < time_limit:
-        # RANDOM NODE RUNS
+        # RATIO RANDOM / ATTRIBUTE RUNS
         rand_run_num = int(np.floor(thread_count*lr_t))
-        # results = run_random(K, env, N_set[0], theta_i)
-        results_rand = Parallel(n_jobs=thread_count)(delayed(run_random)(K, env, N_set[n], theta_i)
-                                                     for n in np.arange(min(rand_run_num, len(N_set))))
-        # delete random nodes
-        del N_set[:rand_run_num]
-        # analyze random nodes
-        theta_rand = []
-        num_nodes = []
-        robust = []
-        tau_rand = []
-        for results in results_rand:
-            theta_rand.append(results["theta"])
-            num_nodes.append(results["num_nodes"])
-            robust.append(results["robust"])
-        # append new taus to N_set
-        # change weights
-        # if not weight_group:
-        #     weights = update_weights(K, env, weights, tau_rand, df_att, lr_w, att_series)
-        # else:
-        #     pass
-        # ATTRIBUTE NODE RUNS
         att_run_num = thread_count - rand_run_num
+
+        # ATTRIBUTE NODE RUNS
         results_att = run_att(K, env, N_set[0], theta_i, att_series, weights, x_static=x_static)
         # results_att = Parallel(n_jobs=thread_count)(delayed(run_att)(K, env, N_set[n], theta_i, att_series, weights,
         #                                                              x_static=x_static) for n in att_run_num)
         # delete att nodes
         del N_set[:att_run_num]
         # analyze att nodes
+        tot_new_nodes = 0
+        n = 0
+        for results in results_att:
+            if results["robust"]:
+                if results["theta"] - theta_i > -1e-8:
+                    continue
+                if print_info:
+                    now = datetime.now().time()
+                    print("Instance AO {}: ATT ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
+                            env.inst_num, iteration, np.round(time.time() - start_time, 3), now, np.round(results["theta"], 4),
+                            [len(t) for t in results["tau"].values()], prune_count))
+                # store results
+                theta_i, x_i, y_i = (copy.deepcopy(results["theta"]),
+                                     copy.deepcopy(results["x"]),
+                                     copy.deepcopy(results["y"]))
+                tau_i = copy.deepcopy(results["tau"])
+                inc_thetas_t[time.time() - start_time] = theta_i
+                inc_thetas_n[tot_nodes+results["num_nodes"]] = theta_i
+                inc_tau[time.time() - start_time] = tau_i
+                inc_x[time.time() - start_time] = x_i
+                inc_y[time.time() - start_time] = y_i
+            # store results per run for learning
+            theta_att.append(results["theta"])
+            num_nodes_att.append(results["num_nodes"])
+            robust_att.append(results["robust"])
+            df_att_list.append(results["df_att"])
+            # append new taus to N_set
+            N_set += results["N_set"]
+            # update times
+            mp_time += results["mp_time"]
+            sp_time += results["sp_time"]
+            att_time += results["att_time"]
+            tot_new_nodes += results["num_nodes"]
+            # indexing
+            n += 1
+        tot_nodes += tot_new_nodes
 
-        # append new taus to N_set
+        # RANDOM NODE RUNS
+        rand_run_num = int(np.floor(thread_count*lr_t))
+        # results = run_random(K, env, N_set[0], theta_i)
+        rand_start = time.time()
+        results_rand = Parallel(n_jobs=thread_count)(delayed(run_random)(K, env, N_set[n], theta_i)
+                                                     for n in np.arange(min(rand_run_num, len(N_set))))
+        rand_run_time += time.time() - rand_start
+        # delete random nodes
+        del N_set[:rand_run_num]
+        # analyze random nodes
+        tot_new_nodes = 0
+        n = 0
+        for results in results_rand:
+            if results["robust"]:
+                if results["theta"] - theta_i > -1e-8:
+                    continue
+                if print_info:
+                    now = datetime.now().time()
+                    print("Instance AO {}: RANDOM ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
+                            env.inst_num, iteration, np.round(time.time() - start_time, 3), now, np.round(results["theta"], 4),
+                            [len(t) for t in results["tau"].values()], prune_count))
+                # store results
+                theta_i, x_i, y_i = (copy.deepcopy(results["theta"]),
+                                     copy.deepcopy(results["x"]),
+                                     copy.deepcopy(results["y"]))
+                tau_i = copy.deepcopy(results["tau"])
+                inc_thetas_t[time.time() - start_time] = theta_i
+                inc_thetas_n[tot_nodes+results["num_nodes"]] = theta_i
+                inc_tau[time.time() - start_time] = tau_i
+                inc_x[time.time() - start_time] = x_i
+                inc_y[time.time() - start_time] = y_i
+            # store results per run for learning
+            theta_rand.append(results["theta"])
+            num_nodes_rand.append(results["num_nodes"])
+            robust_rand.append(results["robust"])
+            tau_rand.append(results["tau"])
+            # append new taus to N_set
+            N_set += results["N_set"]
+            # update times
+            mp_time += results["mp_time"]
+            sp_time += results["sp_time"]
+            att_time += results["att_time"]
+            tot_new_nodes += results["num_nodes"]
+            # indexing
+            n += 1
+        tot_nodes += tot_new_nodes
+
+        # CHANGE WEIGHTS
+        # analyze from which random results we learn from
+        # metric of best random node depends on: {objective, number of nodes, robustness}
+        tau_best = []
+
+        # if not weight_group:
+        #     weights = update_weights(K, env, weights, tau_rand, df_att, lr_w, att_series)
+        # else:
+        #     pass
 
     # analyze best solutions
 
@@ -147,6 +239,10 @@ def update_weights(K, env, init_weights, tau_rand, df_att, lr_w, att_series):
     weights = init_weights + lr_w*(X_att*(init_weights*X_att - X_rand))
 
     return weights
+
+
+def update_weights_group(K, env, init_weights, tau_rand, df_att, lr_w, att_series):
+    return None
 
 
 def run_random(K, env, tau, theta_i, scen_model_init=None,
@@ -213,8 +309,7 @@ def run_random(K, env, tau, theta_i, scen_model_init=None,
             "mp_time": mp_time, "sp_time": sp_time}
 
 
-def run_att(K, env, tau, att_series, theta_i, weights, scen_model_init=None,
-            scen_nom_model=None, scen_stat_model=None, x_static=None,
+def run_att(K, env, tau, att_series, theta_i, weights, x_static=None,
             start_time=0, time_limit=20*60):
     # initialize
     mp_time = 0
