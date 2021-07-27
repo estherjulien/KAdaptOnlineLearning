@@ -38,15 +38,15 @@ def avg_dist_on_attributes(df_att, scen_att, att_series, xi_dim, weights=[]):
         X = df_att
         X_scen = scen_att
     else:
-        X = df_att.drop([*["xi{}".format(i) for i in np.arange(xi_dim)]], axis=1)
-        X_scen = scen_att.drop([*["xi{}".format(i) for i in np.arange(xi_dim)]])
+        X = df_att.drop([*[("xi", i) for i in np.arange(xi_dim)]], axis=1)
+        X_scen = scen_att.drop([*[("xi", i) for i in np.arange(xi_dim)]])
 
     # average values of X
     X_avg = pd.DataFrame(index=np.arange(K), columns=X.columns, dtype=np.float32)
     for k in np.arange(K):
-        X_avg.loc[k] = X[X["subset"] == k].mean()
-    X_avg = X_avg.drop("subset", axis=1)
-    X_scen = X_scen.drop("subset")
+        X_avg.loc[k] = X[X[("subset", 0)] == k].mean()
+    X_avg = X_avg.drop(("subset", 0), axis=1)
+    X_scen = X_scen.drop(("subset", 0))
 
     # take weighted euclidean distance from rows of X and X_scen
     distance_array = np.zeros(K)
@@ -62,18 +62,30 @@ def avg_dist_on_attributes(df_att, scen_att, att_series, xi_dim, weights=[]):
 
 def attribute_per_scen(scen, env, att_series, scen_nom_model=None, scen_stat_model=None, x_static=None):
     # create list of attributes
-    sr_att = pd.Series({"xi{}".format(i): scen[i] for i in np.arange(len(scen))})
-    sr_att["subset"] = -1
+    sr_att = pd.Series({("xi", 0): scen[i] for i in np.arange(len(scen))})
+    sr_att[("subset", 0)] = -1
     if "nominal" in att_series:
         theta_nominal, x_nominal, y_nominal = scenario_fun_nominal_update(env, scen, scen_nom_model)
 
     if "nominal_obj" in att_series:
-        sr_att["nominal_obj"] = theta_nominal
+        sr_att[("nominal_obj", 0)] = theta_nominal
     if "nominal_y" in att_series:
-        for i in np.arange(env.xi_dim):
-            sr_att[f"nominal_y[{i}]"] = y_nominal[i]
+        for i in np.arange(env.y_dim):
+            sr_att[("nominal_y", i)] = y_nominal[i]
     return sr_att
 
 
+def init_weights(env, att_series):
+    # create list of attributes
+    weight_id = []
+    weight_id += [("xi", i) for i in np.arange(env.xi_dim)]
+    x_static = None
 
+    if "nominal_obj" in att_series:
+        weight_id += [("nominal_obj", 0)]
+    if "nominal_y" in att_series:
+        weight_id += [("nominal_y", i) for i in np.arange(env.y_dim)]
+
+    weights = pd.Series(1.0, index=weight_id)
+    return weights, x_static
 
