@@ -10,7 +10,7 @@ import copy
 import time
 
 
-def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, att_crit=.00005, weight_group=False, thread_count=8,
+def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=False, thread_count=8,
                    time_limit=20*60, print_info=False, problem_type="test"):
     # Initialize
     N_set = [{k: [] for k in np.arange(K)}]
@@ -54,20 +54,29 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, att_crit=.00005, weigh
     now = datetime.now().time()
 
     weights, x_static = init_weights(env, att_series)
+    if "nominal" in att_series:
+        scen_nom_model = scenario_fun_nominal_build(env)
+    else:
+        scen_nom_model = None
+    if "static" in att_series:
+        scen_stat_model = scenario_fun_static_build(env, x_static)
+    else:
+        scen_stat_model = None
 
     print("Instance AO {} started at {}".format(env.inst_num, now))
 
+    # Algorithm
     while time.time() - start_time < time_limit:
-        try:
-            # adjust learning rate lr_t
-            # more att if it is better than random
-            if len(theta_att):
-                obj_perf = np.mean(theta_att[-att_run_num:]) - np.mean(theta_rand[-rand_run_num:])
-                print(f"obj_perf = {obj_perf}")
-                lr_t -= 1/thread_count*(obj_perf < att_crit)
-        except:
-            pass
-        rand_run_num = max(1, int(np.floor(thread_count*lr_t)))
+        # attribute to random runs ratio
+        if len(theta_att):
+            obj_perf = np.mean(theta_att[-att_run_num:]) - np.mean(theta_rand[-rand_run_num:])
+            print(f"Instance AO {env.inst_num}: it = {iteration}, obj_perf = {obj_perf}")
+            if obj_perf < att_crit:
+                rand_run_num = max(rand_run_num - 1, 1)
+            else:
+                rand_run_num = min(rand_run_num + 1, thread_count - 1)
+        else:
+            rand_run_num = thread_count - 1
         att_run_num = thread_count - rand_run_num
         att_bool_list = [*[False]*rand_run_num, *[True]*att_run_num]
         # ATTRIBUTE NODE RUNS
@@ -179,11 +188,13 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, att_crit=.00005, weigh
             df_att_best = df_att_list[-1]
 
             weights, att_perf = update_weights(K, env, weights, tau_rand=tau_rand_best,
-                                     df_att=df_att_best,
-                                     lr_w=lr_w,
-                                     att_series=att_series,
-                                     weight_group=weight_group,
-                                     x_static=x_static)
+                                               df_att=df_att_best,
+                                               lr_w=lr_w,
+                                               att_series=att_series,
+                                               weight_group=weight_group,
+                                               x_static=x_static,
+                                               scen_nom_model=scen_nom_model,
+                                               scen_stat_model=scen_stat_model)
             print(f"Instance AO {env.inst_num}, it = {iteration}, att perf = {att_perf}")
         except:
             print(f"Instance AO {env.inst_num}, it = {iteration} finished")
@@ -230,17 +241,8 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, att_crit=.00005, weigh
     return results
 
 
-def update_weights(K, env, init_weights, tau_rand, df_att, lr_w, att_series, x_static=None, weight_group=False):
-    # make df_rand
-    if "nominal" in att_series:
-        scen_nom_model = scenario_fun_nominal_build(env)
-    else:
-        scen_nom_model = None
-    if "static" in att_series:
-        scen_stat_model = scenario_fun_static_build(env, x_static)
-    else:
-        scen_stat_model = None
-
+def update_weights(K, env, init_weights, tau_rand, df_att, lr_w, att_series, x_static=None, weight_group=False,
+                   scen_stat_model=None, scen_nom_model=None):
     # initialize df_att
     df_rand = pd.DataFrame()
     i = 0
@@ -286,9 +288,9 @@ def update_weights(K, env, init_weights, tau_rand, df_att, lr_w, att_series, x_s
             for att in att_all.index:
                 weight_change += (X_att[att]*(init_weights[att]*X_att[att] - X_rand[att]))
             for att in att_all.index:
-                weights[att] = init_weights[att] + lr_w*weight_change
+                weights[att] = init_weights[att] - lr_w*weight_change
     else:
-        weights = init_weights + lr_w*(X_att*(init_weights*X_att - X_rand))
+        weights = init_weights - lr_w*(X_att*(init_weights*X_att - X_rand))
     performance = ((X_att - X_rand)**2).mean()
     return weights, performance
 
@@ -305,7 +307,6 @@ def run_random(K, env, tau, theta_i, time_limit=20*60, it=0):
     mp_time = 0
     sp_time = 0
     N_set = []
-    zeta = 10
     initXi = [len(t) for t in tau.values()]
 
     xi_new = None
@@ -329,7 +330,11 @@ def run_random(K, env, tau, theta_i, time_limit=20*60, it=0):
             mp_time += time.time() - start_mp
 
         if theta - theta_i > -1e-8:
-            robust_bool = False
+            zeta, _ = separation_fun(K, x, y, theta, env, tau)
+            if zeta < 1e-4:
+                robust_bool = True
+            else:
+                robust_bool = False
             break
 
         # SUBPROBLEM
@@ -374,7 +379,6 @@ def run_att(K, env, tau, theta_i, weights, att_series, x_static=None, time_limit
     sp_time = 0
     att_time = 0
     N_set = []
-    zeta = 10
     initXi = [len(t) for t in tau.values()]
 
     if "nominal" in att_series:
@@ -427,7 +431,11 @@ def run_att(K, env, tau, theta_i, weights, att_series, x_static=None, time_limit
             mp_time += time.time() - start_mp
 
         if theta - theta_i > -1e-8:
-            robust_bool = False
+            zeta, _ = separation_fun(K, x, y, theta, env, tau)
+            if zeta < 1e-4:
+                robust_bool = True
+            else:
+                robust_bool = False
             break
 
         # SUBPROBLEM

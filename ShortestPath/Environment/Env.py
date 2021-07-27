@@ -75,21 +75,7 @@ class Graph:
 
         # second stage
         cols = ["blue", "purple", "green", "red", "yellow", "orange", "grey", "cornflowerblue", "hotpink"]
-        # find most expensive y
-        max_thetas = np.zeros(K)
         for k in np.arange(K):
-            if tau[k]:
-                max_thetas[k] = max([sum((1 + xi[a] / 2) * self.distances_array[a] * y[k][a] for a in np.arange(self.num_arcs)) for xi in tau[k]])
-            else:
-                max_thetas[k] = 0
-        k_worst = np.argmax(max_thetas)
-
-        for k in np.arange(K):
-            if k == k_worst:
-                for a in np.arange(self.num_arcs):
-                    if y[k][a] > 0.5:
-                        i, j = self.arcs_array[a]
-                        plt.plot(self.vertices[[i, j], 0], self.vertices[[i, j], 1], "k", linewidth=3)
             if not tau[k]:
                 continue
             for a in np.arange(self.num_arcs):
