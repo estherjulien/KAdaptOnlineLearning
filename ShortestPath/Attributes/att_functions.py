@@ -1,35 +1,35 @@
 import pandas as pd
 import numpy as np
 from ShortestPath.ProblemMILPs.functions import *
-from sklearn.neighbors import KNeighborsClassifier
+# from sklearn.neighbors import KNeighborsClassifier
 import copy
 
 
-def knn_on_attributes(df_att, scen_att, att_series, xi_dim, knn_k=3):
-    leftover_subsets = list(df_att.subset.unique())
-    order = []
-    while len(leftover_subsets):
-        df_att_tmp = df_att.loc[df_att["subset"].isin(leftover_subsets)]
-        neigh = KNeighborsClassifier(n_neighbors=min(knn_k, len(df_att_tmp)), weights="distance")
-        # everything except for label
-        if "coords" in att_series:
-            X = df_att_tmp.drop("subset", axis=1)
-            X_scen = scen_att.drop("subset")
-        else:
-            X = df_att_tmp.drop([*["xi{}".format(i) for i in np.arange(xi_dim)], "subset"], axis=1)
-            X_scen = scen_att.drop([*["xi{}".format(i) for i in np.arange(xi_dim)], "subset"])
-        try:
-            X = X.drop("actual_static_obj", axis=1)
-            X_scen = X_scen.drop("actual_static_obj")
-            X = X.drop("total_costs", axis=1)
-            X_scen = X_scen.drop("total_costs")
-        except:
-            pass
-        neigh.fit(X, df_att_tmp["subset"])
-        subset = neigh.predict(np.array(X_scen).reshape(1, len(X_scen)))[0]
-        order.append(int(subset))
-        leftover_subsets.remove(subset)
-    return order
+# def knn_on_attributes(df_att, scen_att, att_series, xi_dim, knn_k=3):
+#     leftover_subsets = list(df_att.subset.unique())
+#     order = []
+#     while len(leftover_subsets):
+#         df_att_tmp = df_att.loc[df_att["subset"].isin(leftover_subsets)]
+#         neigh = KNeighborsClassifier(n_neighbors=min(knn_k, len(df_att_tmp)), weights="distance")
+#         # everything except for label
+#         if "coords" in att_series:
+#             X = df_att_tmp.drop("subset", axis=1)
+#             X_scen = scen_att.drop("subset")
+#         else:
+#             X = df_att_tmp.drop([*["xi{}".format(i) for i in np.arange(xi_dim)], "subset"], axis=1)
+#             X_scen = scen_att.drop([*["xi{}".format(i) for i in np.arange(xi_dim)], "subset"])
+#         try:
+#             X = X.drop("actual_static_obj", axis=1)
+#             X_scen = X_scen.drop("actual_static_obj")
+#             X = X.drop("total_costs", axis=1)
+#             X_scen = X_scen.drop("total_costs")
+#         except:
+#             pass
+#         neigh.fit(X, df_att_tmp["subset"])
+#         subset = neigh.predict(np.array(X_scen).reshape(1, len(X_scen)))[0]
+#         order.append(int(subset))
+#         leftover_subsets.remove(subset)
+#     return order
 
 
 def avg_dist_on_attributes(df_att, scen_att, att_series, xi_dim, weights=[]):

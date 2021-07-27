@@ -105,6 +105,8 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, att_crit=.00005, weigh
                         inc_y[time.time() - start_time] = y_i
                     else:
                         prune_count += 1
+                else:
+                    prune_count += 1
                 # store results per run for learning
                 theta_att.append(results["theta"])
                 num_nodes_att.append(results["num_nodes"])
@@ -143,8 +145,11 @@ def algorithm_main(K, env, att_series, lr_w=.5, lr_t=0.9, att_crit=.00005, weigh
                         inc_tau[time.time() - start_time] = tau_i
                         inc_x[time.time() - start_time] = x_i
                         inc_y[time.time() - start_time] = y_i
+                    else:
+                        prune_count += 1
                 else:
                     prune_count += 1
+
                 # store results per run for learning
                 theta_rand.append(results["theta"])
                 num_nodes_rand.append(results["num_nodes"])
@@ -300,6 +305,8 @@ def run_random(K, env, tau, theta_i, time_limit=20*60, it=0):
     mp_time = 0
     sp_time = 0
     N_set = []
+    zeta = 10
+    initXi = [len(t) for t in tau.values()]
 
     xi_new = None
     k_new = None
@@ -354,7 +361,8 @@ def run_random(K, env, tau, theta_i, time_limit=20*60, it=0):
             N_set.append(tau_tmp)
 
     num_nodes = sum([len(t) for t in tau.values()])
-    print(f"Instance AO {env.inst_num}; RANDOM RUN {it} finished in {np.round(time.time()-start_time, 4)}, #Nodes = {num_nodes}, Robust = {robust_bool}, theta = {theta}")
+    print(f"Instance AO {env.inst_num}; RANDOM RUN {it} finished in {np.round(time.time()-start_time, 4)}, #Nodes = {num_nodes}, Robust = {robust_bool}, theta = {theta}, "
+          f"initXi = {initXi}, finalXi = {[len(t) for t in tau.values()]}")
 
     return {"theta": theta, "x": x, "y": y, "tau": tau, "robust": robust_bool, "num_nodes": num_nodes, "N_set": N_set,
             "mp_time": mp_time, "sp_time": sp_time, "att_bool": False, "violation": zeta}
@@ -366,6 +374,8 @@ def run_att(K, env, tau, theta_i, weights, att_series, x_static=None, time_limit
     sp_time = 0
     att_time = 0
     N_set = []
+    zeta = 10
+    initXi = [len(t) for t in tau.values()]
 
     if "nominal" in att_series:
         scen_nom_model = scenario_fun_nominal_build(env)
@@ -467,7 +477,8 @@ def run_att(K, env, tau, theta_i, weights, att_series, x_static=None, time_limit
             N_set.append(tau_tmp)
 
     num_nodes = sum([len(t) for t in tau.values()])
-    print(f"Instance AO {env.inst_num}; ATT RUN {it} finished in {np.round(time.time()-start_time, 4)}, #Nodes = {num_nodes}, Robust = {robust_bool}, theta = {theta}")
+    print(f"Instance AO {env.inst_num}; ATT RUN {it} finished in {np.round(time.time()-start_time, 4)}, #Nodes = {num_nodes}, Robust = {robust_bool}, theta = {theta}, "
+          f"initXi = {initXi}, finalXi = {[len(t) for t in tau.values()]}")
 
     return {"theta": theta, "x": x, "y": y, "tau": tau, "df_att": df_att, "robust": robust_bool, "num_nodes": num_nodes,
             "N_set": N_set, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time, "att_bool": True, "violation": zeta}
