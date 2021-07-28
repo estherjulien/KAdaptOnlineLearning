@@ -297,7 +297,8 @@ def run_random(K, env, tau, theta_i, att_series, df_rand, time_limit=20*60, it=0
     N_set = []
     N_set_att = []
     initXi = [len(t) for t in tau.values()]
-
+    robust_bool = False
+    zeta = 10
     xi_new = None
     k_new = None
     start_time = time.time()
@@ -384,7 +385,8 @@ def run_att(K, env, tau, theta_i, weights, att_series, df_att, time_limit=20*60,
     N_set = []
     N_set_att = []
     initXi = [len(t) for t in tau.values()]
-
+    robust_bool = False
+    zeta = 10
     xi_new = None
     k_new = None
     start_time = time.time()
