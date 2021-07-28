@@ -443,7 +443,6 @@ def run_att(K, env, tau, theta_i, weights, att_series, df_att, time_limit=20*60,
             K_prime = min(K, full_list[-1] + 2)
             K_set = np.arange(K_prime)
             k_new = np.random.randint(len(K_set))
-        k_new = np.random.randint(len(K_set))
         new_att = len(df_att)
         df_att.loc[new_att] = scen_att_new
         for k in K_set:
