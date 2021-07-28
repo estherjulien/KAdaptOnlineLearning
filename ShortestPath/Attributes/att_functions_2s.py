@@ -31,8 +31,8 @@ def avg_dist_on_attributes(df_att, scen_att, att_series, xi_dim, weights=[]):
         X = df_att
         X_scen = scen_att
     else:
-        X = df_att.drop([*[("xi", f"xi{i}") for i in np.arange(xi_dim)]], axis=1)
-        X_scen = scen_att.drop([*[("xi", f"xi{i}") for i in np.arange(xi_dim)]])
+        X = df_att.drop([*[("xi", i) for i in np.arange(xi_dim)]], axis=1)
+        X_scen = scen_att.drop([*[("xi", i) for i in np.arange(xi_dim)]])
 
     # average values of X
     X_avg = pd.DataFrame(index=np.arange(K), columns=X.columns, dtype=np.float32)
