@@ -246,7 +246,6 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=Fals
     return results
 
 
-# todo: this stuff needs to be changed
 def update_weights(K, env, init_weights, df_rand, df_att, lr_w, att_series, weight_group=False):
     if "coords" not in att_series:
         df_att = df_att.drop([*[("xi", i) for i in np.arange(env.xi_dim)]], axis=1)
