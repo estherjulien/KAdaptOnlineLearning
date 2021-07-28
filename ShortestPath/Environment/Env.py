@@ -7,7 +7,6 @@ import copy
 class Graph:
     def __init__(self, N, first_stage_ratio=0.2, gamma_perc=0.5, inst_num=0, throw_away_perc=0.1, max_degree=10, min_degree=3, init_vertices=None, init_distances=None):
         self.N = N
-        self.gamma_perc = gamma_perc
         if init_vertices is None:
             self.vertices, init_arcs = self.init_graph(self)
         else:
@@ -21,7 +20,6 @@ class Graph:
         self.xi_dim = self.num_arcs
         self.x_dim = self.num_arcs
         self.y_dim = self.num_arcs
-        self.gamma = self.gamma_perc * self.num_arcs
         self.arcs_array = np.array([[i, j] for i in np.arange(self.N) for j in np.arange(self.N) if self.arcs[i, j]])
         self.distances_array = np.array([self.distances[i, j] for i, j in self.arcs_array])
         self.arcs_in, self.arcs_out = self.in_out_arcs(self)
@@ -29,11 +27,13 @@ class Graph:
         self.upper_bound = sum(self.distances_array)*3
         self.inst_num = inst_num
         self.init_uncertainty = np.zeros(self.num_arcs)
-        self.max_first_stage = self.shortest_path(self)*first_stage_ratio
 
         # list of nodes inside first stage range
-        self.inside_range, self.outside_range = self.shortest_path(self, range_used=True)
-
+        dist_to_N, num_arcs_used, self.max_first_stage, self.inside_range, self.outside_range = self.shortest_path(self, first_stage_ratio)
+        self.max_first_stage = dist_to_N*first_stage_ratio
+        self.gamma = num_arcs_used * gamma_perc
+        self.act_gamma_perc = self.gamma/self.num_arcs
+        print(f"Instance {self.inst_num}: actual gamma perc = {self.act_gamma_perc}")
         # plot graph
         self.plot_graph()
 
@@ -94,7 +94,7 @@ class Graph:
         plt.close()
 
     @staticmethod
-    def shortest_path(self, range_used=False):
+    def shortest_path(self, first_stage_ratio):
         N = self.N
         # dijkstra on arcs, with node s=0 and t=N
         # initialize stuff
@@ -118,12 +118,17 @@ class Graph:
                     dist[j] = alt
                     prev[j] = i
 
-        if range_used:
-            inside_range = np.where(dist*1.5 < self.max_first_stage)[0]
-            outside_range = np.where(dist > 1.1*self.max_first_stage)[0]
-            return inside_range, outside_range
-        else:
-            return dist[N-1]
+        # backtrack
+        num_arcs = 0
+        p = N-1
+        while p != 0:
+            p = prev[p]
+            num_arcs += 1
+
+        max_first_stage = dist[N-1]*first_stage_ratio
+        inside_range = np.where(dist*1.5 < max_first_stage)[0]
+        outside_range = np.where(dist > 1.1*max_first_stage)[0]
+        return dist[N-1], num_arcs, max_first_stage, inside_range, outside_range
 
     @staticmethod
     def isconnected(self, arcs):

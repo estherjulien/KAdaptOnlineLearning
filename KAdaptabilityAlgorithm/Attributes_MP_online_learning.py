@@ -10,7 +10,7 @@ import copy
 import time
 
 
-def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=False, thread_count=8,
+def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
                    time_limit=20 * 60, print_info=False, problem_type="test"):
     # Initialize
     N_set = [{k: [] for k in np.arange(K)}]
@@ -85,7 +85,7 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=Fals
             for n in np.arange(min(thread_count, len(N_set))))
         # delete nodes
         del N_set[:min(thread_count, len(N_set))]
-        del N_set_att[:min(thread_count, len(N_set))]
+        del N_set_att[:min(thread_count, len(N_set_att))]
         # analyze att nodes
         tot_new_nodes = 0
         n = 0
@@ -96,7 +96,7 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=Fals
                         if print_info:
                             now = datetime.now().time()
                             print(
-                                "Instance AO {}: ATT ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
+                                "Instance AOMP {}: ATT ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
                                     env.inst_num, iteration, np.round(time.time() - start_time, 3), now,
                                     np.round(results["theta"], 4),
                                     [len(t) for t in results["tau"].values()], prune_count))
@@ -196,8 +196,7 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=Fals
             weights, att_perf = update_weights(K, env, weights, df_rand=df_rand_best,
                                                df_att=df_att_best,
                                                lr_w=lr_w,
-                                               att_series=att_series,
-                                               weight_group=weight_group)
+                                               att_series=att_series)
             print(f"Instance AOMP {env.inst_num}, it = {iteration}, att perf = {att_perf}")
         except:
             print(f"Instance AOMP {env.inst_num}, it = {iteration} finished")
@@ -244,41 +243,6 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=Fals
     except:
         pass
     return results
-
-
-def update_weights(K, env, init_weights, df_rand, df_att, lr_w, att_series, weight_group=False):
-    if "coords" not in att_series:
-        df_att = df_att.drop([*[("xi", i) for i in np.arange(env.xi_dim)]], axis=1)
-        df_rand = df_rand.drop([*[("xi", i) for i in np.arange(env.xi_dim)]], axis=1)
-
-    # average values of df_att
-    X_att = pd.DataFrame(columns=df_att.columns, dtype=np.float32)
-    for k in np.arange(K):
-        X_att.loc[k] = df_att[df_att[("subset", 0)] == k].var()
-    # difference
-    X_att = X_att.drop(("subset", 0), axis=1).mean()
-
-    # average values of df_rand
-    X_rand = pd.DataFrame(columns=df_rand.columns, dtype=np.float32)
-    for k in np.arange(K):
-        X_rand.loc[k] = df_rand[df_rand[("subset", 0)] == k].var()
-    # difference
-    X_rand = X_rand.drop(("subset", 0), axis=1).mean()
-
-    # update weights
-    if weight_group:
-        # here we have df_att and series together. So use this series as update, then expand for all dimensions again
-        weights = pd.Series(0.0, index=init_weights.index)
-        for att_type, att_all in X_att.groupby(level=0):
-            weight_change = 0
-            for att in att_all.index:
-                weight_change += (X_att[att] * (init_weights[att] * X_att[att] - X_rand[att]))
-            for att in att_all.index:
-                weights[att] = init_weights[att] - lr_w * weight_change
-    else:
-        weights = init_weights - lr_w * (X_att * (init_weights * X_att - X_rand))
-    performance = ((X_att - X_rand) ** 2).mean()
-    return weights, performance
 
 
 def run_function(att_bool, K, env, tau, theta_i, weights, att_series, df_att, time_limit=60*60, it=0):
@@ -435,13 +399,15 @@ def run_att(K, env, tau, theta_i, weights, att_series, df_att, time_limit=20*60,
             k_new = 0
         elif len(full_list) == K:
             start_att = time.time()
-            K_set = avg_dist_on_attributes(df_att, scen_att_new, att_series, env.xi_dim, weights)
+            K_set = avg_dist_on_attributes(df_att, scen_att_new, weights)
             k_new = K_set[0]
             att_time += time.time() - start_att
         else:
             K_prime = min(K, full_list[-1] + 2)
             K_set = np.arange(K_prime)
-            k_new = np.random.randint(len(K_set))
+            # select empty bag as next bag
+            k_new = K_set[-1]
+
         new_att = len(df_att)
         df_att.loc[new_att] = scen_att_new
         for k in K_set:
