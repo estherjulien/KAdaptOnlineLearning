@@ -31,14 +31,12 @@ def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y):
 
     if "slack" in att_series:
         slack = slack_fun(K, scen, env, theta, x, y)
-        sr_att[("slack", 0)] = slack[0]
         for k in np.arange(K):
-            sr_att[("slack", f"K{k}")] = slack[k+1]
+            sr_att[("slack", f"K{k}")] = slack[1]
     if "const_to_z_dist" in att_series:
         c_to_z = const_to_z_fun(K, scen, env, theta, x, y)
-        sr_att[("c_to_z", 0)] = c_to_z[0]
         for k in np.arange(K):
-            sr_att[("c_to_z", f"K{k}")] = c_to_z[k+1]
+            sr_att[("c_to_z", f"K{k}")] = c_to_z[1]
     if "const_to_const_dist" in att_series:
         c_to_c = const_to_const_fun(K, scen, env, tau)
         for k in np.arange(K):
@@ -49,16 +47,13 @@ def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y):
 
 def slack_fun(K, scen, env, theta, x, y):
     slack = dict()
-    slack[0] = sum((1 + scen[a] / 2) * env.distances_array[a] * x[a] for a in np.arange(env.num_arcs)) \
-               - env.max_first_stage
     for k in np.arange(K):
-        slack[k+1] = sum((1 + scen[a] / 2) * env.distances_array[a] * (x[a] + y[k][a]) for a in np.arange(env.num_arcs)) - theta
+        slack[k] = sum((1 + scen[a] / 2) * env.distances_array[a] * y[k][a] for a in np.arange(env.num_arcs)) - theta
 
     slack_final = dict()
-    slack_final[0] = slack[0]
-    sum_slack = sum(list(slack[1:].values()))
+    sum_slack = sum(list(slack.values()))
     for k in np.arange(K):
-        slack_final[k+1] = slack[k+1]/sum_slack
+        slack_final[k] = slack[k]/sum_slack
 
     return slack_final
 
@@ -67,30 +62,20 @@ def const_to_z_fun(K, scen, env, theta, x, y):
     # point-to-plane: https://mathworld.wolfram.com/Point-PlaneDistance.html
     # variable xi
     dist = dict()
-    # CONST 0
-    # define coefficients
-    coeff_0 = [1/2*env.distances_array[a]*x[a] for a in np.arange(env.num_arcs)]
-    # define constant
-    const_0 = sum([env.distances_array[a]*x[a] for a in np.arange(env.num_arcs)]) - env.max_first_stage
-    # take distance
-    dist[0] = (sum([coeff_0[a]*scen[a] for a in np.arange(env.num_arcs)]) + const_0) / \
-              (np.sqrt(sum(coeff_0[a]**2 for a in np.arange(env.num_arcs))))
-
     for k in np.arange(K):
         # CONST 1
         # define coefficients
-        coeff_1 = [1 / 2 * env.distances_array[a] * (x[a] + y[k][a]) for a in np.arange(env.num_arcs)]
+        coeff_1 = [1 / 2 * env.distances_array[a] * (y[k][a]) for a in np.arange(env.num_arcs)]
         # define constant
-        const_1 = sum([env.distances_array[a] * (x[a] + y[k][a]) for a in np.arange(env.num_arcs)]) - theta
+        const_1 = sum([env.distances_array[a] * (y[k][a]) for a in np.arange(env.num_arcs)]) - theta
         # take distance
-        dist[k+1] = (sum([coeff_1[a] * scen[a] for a in np.arange(env.num_arcs)]) + const_1) / \
+        dist[k] = (sum([coeff_1[a] * scen[a] for a in np.arange(env.num_arcs)]) + const_1) / \
                   (np.sqrt(sum(coeff_1[a] ** 2 for a in np.arange(env.num_arcs))))
 
     dist_final = dict()
-    dist_final[0] = dist[0]
-    sum_dist = sum(list(dist[1:].values()))
+    sum_dist = sum(list(dist.values()))
     for k in np.arange(K):
-        dist_final[k+1] = dist[k+1]/sum_dist
+        dist_final[k] = dist[k]/sum_dist
 
     return dist_final
 
@@ -132,9 +117,9 @@ def init_weights(K, env, att_series):
     if "coords" in att_series:
         weight_id += [("xi", i) for i in np.arange(env.xi_dim)]
     if "slack" in att_series:
-        weight_id += [*[("slack", 0)], *[("slack", f"K{k}") for k in np.arange(K)]]
+        weight_id += [("slack", f"K{k}") for k in np.arange(K)]
     if "const_to_z_dist" in att_series:
-        weight_id += [*[("c_to_z", 0)], *[("c_to_z", f"K{k}") for k in np.arange(K)]]
+        weight_id += [("c_to_z", f"K{k}") for k in np.arange(K)]
     if "const_to_const_dist" in att_series:
         weight_id += [("c_to_c", f"K{k}") for k in np.arange(K)]
 
@@ -206,9 +191,6 @@ def update_weights(K, env, init_weights, df_rand, df_att, lr_w, att_series):
                 weights[att] = init_weights[att] - lr_w * weight_change
         else:
             for att in att_all.index:
-                if att[1] == 0:
-                    weights[att] = init_weights[att] - lr_w * (X_att[att] * (init_weights[att] * X_att[att] - X_rand[att]))
-                    continue
                 for k in np.arange(K):
                     k_att = (att[0], att[1] + f"{k}")
                     weights[k_att] = init_weights[k_att] - lr_w * (X_att[att] * (init_weights[k_att] * X_att[att] - X_rand[att]))

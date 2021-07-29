@@ -25,31 +25,7 @@ def scenario_fun_update(K, k_new, xi_new, graph, scen_model=None):
     return theta_sol, None, y_sol, scen_model
 
 
-def scenario_fun_build(K, tau, graph, scen_model):
-    # use same model and just add new constraint
-    y = dict()
-    for k in np.arange(K):
-        y[k] = {a: scen_model.getVarByName("y_{}[{}]".format(k, a)) for a in np.arange(graph.num_arcs)}
-    theta = scen_model.getVarByName("theta")
-
-    for k in np.arange(K):
-        for xi in tau[k]:
-            scen_model.addConstr(gp.quicksum((1 + xi[a] / 2) * graph.distances_array[a] * y[k][a]
-                                             for a in np.arange(graph.num_arcs)) <= theta)
-    scen_model.update()
-
-    # solve model
-    scen_model.Params.OutputFlag = 0
-    scen_model.optimize()
-    y_sol = dict()
-    for k in np.arange(K):
-        y_sol[k] = {i: var.X for i, var in y[k].items()}
-    theta_sol = scen_model.getVarByName("theta").X
-
-    return theta_sol, None, y_sol, scen_model
-
-
-def scenario_fun_init(K, graph):
+def scenario_fun_build(K, tau, graph):
     scen_model = gp.Model("Scenario-Based K-Adaptability Problem")
     N = graph.N
     # variables
@@ -73,10 +49,21 @@ def scenario_fun_init(K, graph):
                 gp.quicksum(y[k][a] for a in graph.arcs_out[j])
                 - gp.quicksum(y[k][a] for a in graph.arcs_in[j]) >= 0)
 
+    for k in np.arange(K):
+        for xi in tau[k]:
+            scen_model.addConstr(gp.quicksum((1 + xi[a] / 2) * graph.distances_array[a] * y[k][a]
+                                             for a in np.arange(graph.num_arcs)) <= theta)
+    scen_model.update()
+
     # solve model
     scen_model.Params.OutputFlag = 0
     scen_model.optimize()
-    return scen_model
+    y_sol = dict()
+    for k in np.arange(K):
+        y_sol[k] = {i: var.X for i, var in y[k].items()}
+    theta_sol = scen_model.getVarByName("theta").X
+
+    return theta_sol, None, y_sol, scen_model
 
 
 def separation_fun(K, x, y, theta, graph, tau):

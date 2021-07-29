@@ -1,5 +1,5 @@
-from ShortestPath.Attributes.att_mp_functions_2s import *
-from ShortestPath.ProblemMILPs.functions_2s import *
+from ShortestPath.Attributes.att_mp_functions import *
+from ShortestPath.ProblemMILPs.functions import *
 
 from joblib import Parallel, delayed
 from datetime import datetime
@@ -10,7 +10,7 @@ import copy
 import time
 
 
-def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
+def algorithm_main(K, env, att_series, lr_w=1, att_crit=.001, thread_count=8,
                    time_limit=20 * 60, print_info=False, problem_type="test"):
     # Initialize
     N_set = [{k: [] for k in np.arange(K)}]
@@ -63,17 +63,22 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
     N_set_att = [N_set_att_init]
 
     print("Instance AOMP {} started at {}".format(env.inst_num, now))
-
     # Algorithm
     while time.time() - start_time < time_limit:
         # attribute to random runs ratio
         if len(theta_att):
             obj_perf = np.mean(theta_att[-att_run_num:]) - np.mean(theta_rand[-rand_run_num:])
-            print(f"Instance AOMP {env.inst_num}: it = {iteration}, obj_perf = {obj_perf}")
-            if obj_perf < att_crit:
-                rand_run_num = max(rand_run_num - 1, 1)
-            else:
-                rand_run_num = min(rand_run_num + 1, thread_count - 1)
+            now = datetime.now().time()
+            try:
+                print(f"Instance AOMP {env.inst_num} ({now}), it = {iteration}, att perf = {att_perf}, obj perf = {obj_perf}")
+            except UnboundLocalError:
+                print(f"Instance AOMP {env.inst_num} ({now}), it = {iteration}, obj perf = {obj_perf}")
+
+            if np.mean(att_new_scens) > 1:
+                if obj_perf < att_crit:
+                    rand_run_num = max(rand_run_num - 1, 1)
+                else:
+                    rand_run_num = min(rand_run_num + 1, thread_count - 1)
         else:
             rand_run_num = thread_count - 1
         att_run_num = thread_count - rand_run_num
@@ -89,6 +94,8 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
         # analyze att nodes
         tot_new_nodes = 0
         n = 0
+
+        att_new_scens = []
         for results in results_list:
             if results["att_bool"]:
                 if results["robust"]:
@@ -133,6 +140,7 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
                 sp_time += results["sp_time"]
                 att_time += results["att_time"]
                 tot_new_nodes += results["num_nodes"]
+                att_new_scens.append(results["new_scens"])
             else:
                 if results["robust"]:
                     if results["theta"] - theta_i < -1e-8:
@@ -182,23 +190,29 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
         tot_nodes += tot_new_nodes
 
         # CHANGE WEIGHTS
-        try:
-            # analyze from which random results we learn from
-            # metric of best random node depends on: {objective, number of nodes, robustness}
-            best_rand_run = np.argmin([(theta_rand[i] * num_nodes_rand[i] + violation_rand[i])
-                                       for i in np.arange(len(robust_rand))])
-            # print([(theta_rand[i] * num_nodes_rand[i] + violation_rand[i])
-            #                            for i in np.arange(len(robust_rand))])
-            # select last tau rand and last df_att
-            df_rand_best = df_rand_list[best_rand_run]
-            df_att_best = df_att_list[-1]
+        if np.mean(att_new_scens) > 1:
+            try:
+                # analyze from which random results we learn from
+                # metric of best random node depends on: {objective, number of nodes, robustness}
+                best_rand_run = np.argmin([(theta_rand[i] * num_nodes_rand[i] + violation_rand[i])
+                                           for i in np.arange(len(robust_rand))])
+                # print([(theta_rand[i] * num_nodes_rand[i] + violation_rand[i])
+                #                            for i in np.arange(len(robust_rand))])
+                # select last tau rand and last df_att
+                df_rand_best = df_rand_list[best_rand_run]
+                df_att_best = df_att_list[-1]
 
-            weights, att_perf = update_weights(K, env, weights, df_rand=df_rand_best,
-                                               df_att=df_att_best,
-                                               lr_w=lr_w,
-                                               att_series=att_series)
-            print(f"Instance AOMP {env.inst_num}, it = {iteration}, att perf = {att_perf}")
-        except:
+                weights, att_perf = update_weights(K, env, weights, df_rand=df_rand_best,
+                                                   df_att=df_att_best,
+                                                   lr_w=lr_w,
+                                                   att_series=att_series)
+
+                # for testing
+                weights_test = final_weights(att_series, weights)
+                print(f"Instance AOMP {env.inst_num}, weights test = {weights_test}")
+            except:
+                print(f"Instance AOMP {env.inst_num}, it = {iteration} finished")
+        else:
             print(f"Instance AOMP {env.inst_num}, it = {iteration} finished")
 
         # save every 10 minutes
@@ -207,7 +221,8 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
             # also save inc_tot_nodes
             inc_tot_nodes[time.time() - start_time] = len(N_set)
             cum_tot_nodes[time.time() - start_time] = tot_nodes
-            tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "weights": weights,
+            tmp_weights = final_weights(att_series, weights)
+            tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "weights": tmp_weights,
                            "inc_thetas_t": inc_thetas_t,
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes,
@@ -225,6 +240,8 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, thread_count=8,
     inc_y[runtime] = y_i
     inc_tot_nodes[runtime] = len(N_set)
     cum_tot_nodes[runtime] = tot_nodes
+
+    weights = final_weights(att_series, weights)
 
     now = datetime.now().time()
     print("Instance AOMP {} completed at {}, solved in {} minutes".format(env.inst_num, now, runtime / 60))
@@ -264,6 +281,7 @@ def run_random(K, env, tau, theta_i, att_series, df_rand, time_limit=20*60, it=0
     zeta = 10
     xi_new = None
     k_new = None
+    new_scens = 0
     start_time = time.time()
     while time.time() - start_time < time_limit:
         # MASTER PROBLEM
@@ -298,6 +316,7 @@ def run_random(K, env, tau, theta_i, att_series, df_rand, time_limit=20*60, it=0
             robust_bool = True
             break
         else:
+            new_scens += 1
             # ATTRIBUTES PER SCENARIO
             start_att = time.time()
             scen_att_new = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y)
@@ -337,7 +356,7 @@ def run_random(K, env, tau, theta_i, att_series, df_rand, time_limit=20*60, it=0
 
     return {"theta": theta, "x": x, "y": y, "tau": tau, "df_att": df_rand, "robust": robust_bool, "num_nodes": num_nodes,
             "N_set": N_set, "N_set_att": N_set_att, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time,
-            "att_bool": False, "violation": zeta}
+            "att_bool": False, "violation": zeta, "new_scens": new_scens}
 
 
 def run_att(K, env, tau, theta_i, weights, att_series, df_att, time_limit=20*60, it=0):
@@ -352,6 +371,7 @@ def run_att(K, env, tau, theta_i, weights, att_series, df_att, time_limit=20*60,
     zeta = 10
     xi_new = None
     k_new = None
+    new_scens = 0
     start_time = time.time()
     # ALGORITHM
     while time.time() - start_time < time_limit:
@@ -387,6 +407,7 @@ def run_att(K, env, tau, theta_i, weights, att_series, df_att, time_limit=20*60,
             robust_bool = True
             break
         else:
+            new_scens += 1
             # ATTRIBUTES PER SCENARIO
             start_att = time.time()
             scen_att_new = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y)
@@ -432,4 +453,4 @@ def run_att(K, env, tau, theta_i, weights, att_series, df_att, time_limit=20*60,
 
     return {"theta": theta, "x": x, "y": y, "tau": tau, "df_att": df_att, "robust": robust_bool, "num_nodes": num_nodes,
             "N_set": N_set, "N_set_att": N_set_att, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time, "att_bool": True,
-            "violation": zeta}
+            "violation": zeta, "new_scens": new_scens}
