@@ -32,11 +32,11 @@ def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y):
     if "slack" in att_series:
         slack = slack_fun(K, scen, env, theta, x, y)
         for k in np.arange(K):
-            sr_att[("slack", f"K{k}")] = slack[1]
+            sr_att[("slack", f"K{k}")] = slack[k]
     if "const_to_z_dist" in att_series:
         c_to_z = const_to_z_fun(K, scen, env, theta, x, y)
         for k in np.arange(K):
-            sr_att[("c_to_z", f"K{k}")] = c_to_z[1]
+            sr_att[("c_to_z", f"K{k}")] = c_to_z[k]
     if "const_to_const_dist" in att_series:
         c_to_c = const_to_const_fun(K, scen, env, tau)
         for k in np.arange(K):
@@ -110,21 +110,38 @@ def const_to_const_fun(K, scen, env, tau):
     return cos_final
 
 
-def init_weights(K, env, att_series):
+def init_weights_fun(K, env, att_series, init_weights=None):
     # create list of attributes
     weight_id = []
+    weight_val = []
 
     if "coords" in att_series:
+        try:
+            weight_val += [init_weights["xi"] for i in np.arange(env.xi_dim)]
+        except:
+            weight_val += [1.0 for i in np.arange(env.xi_dim)]
         weight_id += [("xi", i) for i in np.arange(env.xi_dim)]
     if "slack" in att_series:
+        try:
+            weight_val += [init_weights["slack_K"] for k in np.arange(K)]
+        except:
+            weight_val += [1.0 for k in np.arange(K)]
         weight_id += [("slack", f"K{k}") for k in np.arange(K)]
     if "const_to_z_dist" in att_series:
+        try:
+            weight_val += [init_weights["c_to_z_K"] for k in np.arange(K)]
+        except:
+            weight_val += [1.0 for k in np.arange(K)]
         weight_id += [("c_to_z", f"K{k}") for k in np.arange(K)]
     if "const_to_const_dist" in att_series:
+        try:
+            weight_val += [init_weights["c_to_c_K"] for k in np.arange(K)]
+        except:
+            weight_val += [1.0 for k in np.arange(K)]
         weight_id += [("c_to_c", f"K{k}") for k in np.arange(K)]
 
     index = pd.MultiIndex.from_tuples(weight_id, names=["att_type", "att"])
-    weights = pd.Series(1.0, index=index)
+    weights = pd.Series(weight_val, index=index)
     N_set_att_init = pd.DataFrame(columns=index)
     return weights, N_set_att_init
 

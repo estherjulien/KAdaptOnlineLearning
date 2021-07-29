@@ -35,7 +35,6 @@ def algorithm_main(K, env, att_series, lr_w=1, att_crit=.001, thread_count=8,
     sp_time = 0
     att_time = 0
 
-    N_set_att = []
     # store per random node
     theta_rand = []
     num_nodes_rand = []
@@ -59,7 +58,7 @@ def algorithm_main(K, env, att_series, lr_w=1, att_crit=.001, thread_count=8,
     now = datetime.now().time()
 
     # initialize weights
-    weights, N_set_att_init = init_weights(K, env, att_series)
+    weights, N_set_att_init = init_weights_fun(K, env, att_series)
     N_set_att = [N_set_att_init]
 
     print("Instance AOMP {} started at {}".format(env.inst_num, now))
