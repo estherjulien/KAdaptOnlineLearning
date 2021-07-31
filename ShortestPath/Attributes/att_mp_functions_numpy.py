@@ -3,48 +3,47 @@ import numpy as np
 
 
 def avg_dist_on_attributes(X, X_scen, weights=[]):
-    K = len(X[("subset", 0)].unique())
-
+    K_set = np.unique(X[:, 0])
+    num_K = len(K_set)
     # average values of X
-    X_avg = pd.DataFrame(index=np.arange(K), columns=X.columns, dtype=np.float32)
-    for k in np.arange(K):
-        X_avg.loc[k] = X[X[("subset", 0)] == k].mean()
-    X_avg = X_avg.drop(("subset", 0), axis=1)
-    X_scen = X_scen.drop(("subset", 0))
+    num_weights = len(weights)
+    X_avg = np.zeros([num_K, num_weights])
+    for k in np.arange(num_K):
+        X_avg[k] = np.mean(X[X[:, 0] == K_set[k]][:, 1:], axis=0)
 
     # take weighted euclidean distance from rows of X and X_scen
-    distance_array = np.zeros(K)
-    if len(weights) == 0:
-        weights = pd.Series(1, X_scen.index)
-    for col in X_avg.columns:
-        distance_array += weights[col]*(X_avg[col] - X_scen[col])**2
+    distance_array = np.zeros(num_K)
 
-    order = np.array(distance_array.sort_values(ascending=False).index)
+    for att in np.arange(num_weights):
+        distance_array += weights[att]*(X_avg[:, att] - X_scen[att])**2
+
+    order = K_set[np.argsort(distance_array)]
 
     return order
 
 
 def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y):
     # create list of attributes
-    sr_att = pd.Series({("subset", 0): -1})
+    # subset is first value
+    sr_att = [-1]
 
     if "coords" in att_series:
         for i in np.arange(env.xi_dim):
-            sr_att[("xi", i)] = scen[i]
+            sr_att.append(scen[i])
     if "slack" in att_series:
         slack = slack_fun(K, scen, env, theta, x, y)
         for k in np.arange(K):
-            sr_att[("slack", f"K{k}")] = slack[k]
+            sr_att.append(slack[k])
     if "const_to_z_dist" in att_series:
         c_to_z = const_to_z_fun(K, scen, env, theta, x, y)
         for k in np.arange(K):
-            sr_att[("c_to_z", f"K{k}")] = c_to_z[k]
+            sr_att.append(c_to_z[k])
     if "const_to_const_dist" in att_series:
         c_to_c = const_to_const_fun(K, scen, env, tau)
         for k in np.arange(K):
-            sr_att[("c_to_c", f"K{k}")] = c_to_c[k]
+            sr_att.append(c_to_c[k])
 
-    return sr_att
+    return np.array(sr_att)
 
 
 def slack_fun(K, scen, env, theta, x, y):
@@ -114,7 +113,6 @@ def const_to_const_fun(K, scen, env, tau):
 
 def init_weights_fun(K, env, att_series, init_weights=None):
     # create list of attributes
-    weight_id = []
     weight_val = []
 
     if "coords" in att_series:
@@ -122,30 +120,24 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             weight_val += [init_weights["xi"] for i in np.arange(env.xi_dim)]
         except:
             weight_val += [1.0 for i in np.arange(env.xi_dim)]
-        weight_id += [("xi", i) for i in np.arange(env.xi_dim)]
     if "slack" in att_series:
         try:
             weight_val += [init_weights["slack_K"] for k in np.arange(K)]
         except:
             weight_val += [1.0 for k in np.arange(K)]
-        weight_id += [("slack", f"K{k}") for k in np.arange(K)]
     if "const_to_z_dist" in att_series:
         try:
             weight_val += [init_weights["c_to_z_K"] for k in np.arange(K)]
         except:
             weight_val += [1.0 for k in np.arange(K)]
-        weight_id += [("c_to_z", f"K{k}") for k in np.arange(K)]
     if "const_to_const_dist" in att_series:
         try:
             weight_val += [init_weights["c_to_c_K"] for k in np.arange(K)]
         except:
             weight_val += [1.0 for k in np.arange(K)]
-        weight_id += [("c_to_c", f"K{k}") for k in np.arange(K)]
 
-    index = pd.MultiIndex.from_tuples(weight_id, names=["att_type", "att"])
-    weights = pd.Series(weight_val, index=index)
-    N_set_att_init = pd.DataFrame(columns=index)
-    return weights, N_set_att_init
+    weights = np.array(weight_val)
+    return weights
 
 
 def update_weights(K, env, init_weights, df_rand, df_att, lr_w, att_series):

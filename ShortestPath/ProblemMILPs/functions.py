@@ -80,7 +80,7 @@ def separation_fun(K, x, y, theta, graph, tau):
     sep_model.addConstr(gp.quicksum(xi[a] for a in np.arange(graph.num_arcs)) <= graph.gamma)
 
     for k in np.arange(K):
-        if tau[k]:
+        if len(tau[k]) > 0:
             sep_model.addConstr(zeta <= gp.quicksum((1 + xi[a] / 2) * graph.distances_array[a] * y[k][a]
                                                     for a in np.arange(graph.num_arcs)) - theta)
 
@@ -130,3 +130,4 @@ def scenario_fun_nominal_update(graph, scen, smn):
     y_sol = {i: var.X for i, var in y.items()}
     theta_sol = smn.getVarByName("theta").X
     return theta_sol, None, y_sol
+

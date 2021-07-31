@@ -51,7 +51,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
         if xi_new is None:
             # take new node
             tau = N_set.pop(0)
-            df_att = N_set_att.pop()
+            df_att = N_set_att.pop(0)
             # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_build(K, tau, env)
@@ -86,10 +86,10 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
                 now = datetime.now().time()
                 print("Instance AW {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
                     env.inst_num, iteration, np.round(time.time()-start_time, 3), now, np.round(theta, 4), [len(t) for t in tau.values()], prune_count))
-            try:
-                env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type="att_weights", tmp=True)
-            except:
-                pass
+            # try:
+            #     env.plot_graph_solutions(K, y, tau, x=x, alg_type="att_weights", tmp=True, it=iteration)
+            # except:
+            #     pass
             theta_i, x_i, y_i = (copy.deepcopy(theta), copy.deepcopy(x), copy.deepcopy(y))
             tau_i = copy.deepcopy(tau)
             inc_thetas_t[time.time() - start_time] = theta_i
@@ -105,16 +105,17 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
             else:
                 continue
         else:
+            xi_new = xi
             # ATTRIBUTES PER SCENARIO
             start_att = time.time()
-            scen_att_new = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y)
+            scen_att_new = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y)
             att_time += time.time() - start_att
 
         if K == 1:
             N_set = [1]
         else:
             full_list = [k for k in np.arange(K) if tau[k]]
-            if not full_list:
+            if len(full_list) == 0:
                 K_set = [0]
                 k_new = 0
             elif len(full_list) == K:
@@ -134,7 +135,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
                     continue
                 tau_tmp = copy.deepcopy(tau)
                 adj_tau_k = copy.deepcopy(tau_tmp[k])
-                adj_tau_k.append(xi)
+                adj_tau_k.append(xi_new)
                 tau_tmp[k] = adj_tau_k
                 N_set.append(tau_tmp)
                 # N_set_att prep
@@ -174,7 +175,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
         pickle.dump([env, results], handle)
 
     try:
-        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type="att_weights")
+        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type="att")
     except:
         pass
     return results
