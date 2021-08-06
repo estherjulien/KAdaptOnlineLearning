@@ -2,22 +2,24 @@ import pandas as pd
 import numpy as np
 
 
-def avg_dist_on_attributes(X, X_scen, weights=[]):
+def avg_dist_on_attributes(X, X_scen, weights=None):
     K_set = np.unique(X[:, 0])
     num_K = len(K_set)
+    num_scen = len(X)
     # average values of X
     num_weights = len(weights)
-    X_avg = np.zeros([num_K, num_weights])
+
+    X_dist = np.zeros([num_scen, 1 + num_weights])
+    for scen in np.arange(num_scen):
+        X_dist[scen, 0] = X[scen, 0]
+        X_dist[scen, 1:] = weights*(X[scen, 1:] - X_scen[1:])**2
+
+    distance_array = np.zeros(num_K)
     for k in np.arange(num_K):
-        X_avg[k] = np.mean(X[X[:, 0] == K_set[k]][:, 1:], axis=0)
+        distance_array[k] = np.max(np.sum(X_dist[X_dist[:, 0] == k][:, 1:], axis=1))
 
     # take weighted euclidean distance from rows of X and X_scen
-    distance_array = np.zeros(num_K)
-
-    for att in np.arange(num_weights):
-        distance_array += weights[att]*(X_avg[:, att] - X_scen[att])**2
-
-    order = K_set[np.argsort(distance_array)]
+    order = np.argsort(distance_array)
 
     return order
 

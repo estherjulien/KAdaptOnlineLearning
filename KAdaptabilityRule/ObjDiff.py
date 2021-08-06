@@ -1,5 +1,4 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.Attributes.att_mp_functions import *
 from ShortestPath.ProblemMILPs.functions import *
 
 from datetime import datetime
@@ -10,11 +9,9 @@ import copy
 import time
 
 
-def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_type="test", weights=None):
+def algorithm(K, env, time_limit=20*60, print_info=False, problem_type="test"):
+
     # Initialize
-    N_set = [{k: [] for k in np.arange(K)}]
-    N_set[0][0].append(env.init_uncertainty)
-    tau_i = copy.deepcopy(N_set[0])
     iteration = 0
     start_time = time.time()
     # initialization for saving stuff
@@ -32,47 +29,43 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
     prev_save_time = 0
     mp_time = 0
     sp_time = 0
-    att_time = 0
+
     # initialization of lower and upper bounds
     theta_i, x_i, y_i = (env.upper_bound, [], [])
     inc_lb = dict()
     inc_lb[0] = 0
     # K-branch and bound algorithm
     now = datetime.now().time()
-    xi_new, k_new = None, None
+    select_node = True
+    # initialize N_set with actual scenario
+    tau_i = init_k_adapt(K, env)
+    N_set = [tau_i]
 
-    # initialize weights
-    weights, N_set_att_init = init_weights_fun(K, env, att_series, init_weights=weights)
-    N_set_att = [N_set_att_init]
-
-    print("Instance AW {} started at {}".format(env.inst_num, now))
+    print("Instance OD {} started at {}".format(env.inst_num, now))
     while N_set and time.time() - start_time < time_limit:
         # MASTER PROBLEM
-        if xi_new is None:
+        if select_node:
             # take new node
+            tot_nodes += 1
             tau = N_set.pop(0)
-            df_att = N_set_att.pop(0)
             # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
         else:
-            # make new tau from k_new
+            # just update tau, master problem actually already solved
             tot_nodes += 1
-            tau = copy.deepcopy(tau)
-            adj_tau_k = copy.deepcopy(tau[k_new])
-            adj_tau_k.append(xi_new)
+            tau_tmp = copy.deepcopy(tau)
+            adj_tau_k = copy.deepcopy(tau_tmp[k_new])
+            try:
+                adj_tau_k = np.vstack([adj_tau_k, xi])
+            except:
+                adj_tau_k = xi.reshape([1, -1])
             tau[k_new] = adj_tau_k
-            # master problem
-            start_mp = time.time()
-            theta, x, y, model = scenario_fun_update(K, k_new, xi_new, env, model)
-            # theta, x, y, model = scenario_fun_build(K, tau, env, return_model=True)
-            mp_time += time.time() - start_mp
         # prune if theta higher than current robust theta
         if theta - theta_i > -1e-8:
             prune_count += 1
-            xi_new = None
-            k_new = None
+            select_node = True
             continue
 
         # SUBPROBLEM
@@ -84,10 +77,10 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
         if zeta <= 1e-04:
             if print_info:
                 now = datetime.now().time()
-                print("Instance AW {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    Xi{},   prune count = {}".format(
-                    env.inst_num, iteration, np.round(time.time()-start_time, 3), now, np.round(theta, 4), [len(t) for t in tau.values()], prune_count))
+                print("Instance OD {}: ROBUST at iteration {} ({}) (time {}) (node {})  :theta = {},    Xi{},   prune count = {}".format(
+                    env.inst_num, iteration, np.round(time.time()-start_time, 3), tot_nodes, now, np.round(theta, 4), [len(t) for t in tau.values()], prune_count))
             # try:
-            #     env.plot_graph_solutions(K, y, tau, x=x, alg_type="att_weights", tmp=True, it=iteration)
+            #     env.plot_graph_solutions(K, y, tau, x=x, tmp=True, it=iteration, alg_type=problem_type)
             # except:
             #     pass
             theta_i, x_i, y_i = (copy.deepcopy(theta), copy.deepcopy(x), copy.deepcopy(y))
@@ -98,52 +91,66 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
             inc_x[time.time() - start_time] = x_i
             inc_y[time.time() - start_time] = y_i
             prune_count += 1
-            xi_new = None
-            k_new = None
+            select_node = True
             if K == 1:
                 break
             else:
                 continue
         else:
-            xi_new = xi
-            # ATTRIBUTES PER SCENARIO
-            start_att = time.time()
-            scen_att_new = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y)
-            att_time += time.time() - start_att
+            select_node = False
 
         if K == 1:
             N_set = [1]
         else:
-            full_list = [k for k in np.arange(K) if tau[k]]
+            full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
             if len(full_list) == 0:
                 K_set = [0]
                 k_new = 0
+                # solve master problem here
+                start_mp = time.time()
+                theta, x, y, model = scenario_fun_update(K, k_new, xi, env, model)
+                mp_time += time.time() - start_mp
+
             elif len(full_list) == K:
-                start_att = time.time()
-                K_set = avg_dist_on_attributes(df_att, scen_att_new, weights)
-                k_new = K_set[0]
-                att_time += time.time() - start_att
+                K_set = np.arange(K)
+                # try all master problems and select one with highest objective
+                theta_list = np.zeros(K)
+                x_list = dict()
+                y_list = dict()
+                model_list = dict()
+                start_mp = time.time()
+                for k in K_set:
+                    # decide on best tau based on lowest objective
+                    theta_list[k], x_list[k], y_list[k], model_list[k] = scenario_fun_update(K, k, xi, env, model)
+                mp_time += time.time() - start_mp
+                # select k_new based on theta
+                scores = [np.max([theta_list[k] - theta, 0.00001]) for k in K_set]
+                tmp_prob = (scores/np.sum(scores))**(-1)
+                k_prob = tmp_prob/np.sum(tmp_prob)
+                k_new = np.random.choice(K_set, p=k_prob)
+                theta, x, y, model = (theta_list[k_new], x_list[k_new], y_list[k_new], model_list[k_new])
+                del model_list
             else:
                 K_prime = min(K, full_list[-1] + 2)
                 K_set = np.arange(K_prime)
                 k_new = K_set[-1]
-            # add scen to df_att with subset = k_new
-            new_att = len(df_att)
-            df_att.loc[new_att] = scen_att_new
+                # solve master problem here
+                start_mp = time.time()
+                theta, x, y, model = scenario_fun_update(K, k_new, xi, env, model)
+                mp_time += time.time() - start_mp
+
             for k in K_set:
                 if k == k_new:
                     continue
                 tau_tmp = copy.deepcopy(tau)
                 adj_tau_k = copy.deepcopy(tau_tmp[k])
-                adj_tau_k.append(xi_new)
+                try:
+                    adj_tau_k = np.vstack([adj_tau_k, xi])
+                except:
+                    adj_tau_k = xi.reshape([1, -1])
                 tau_tmp[k] = adj_tau_k
                 N_set.append(tau_tmp)
-                # N_set_att prep
-                df_att.loc[new_att, ("subset", 0)] = k
-                N_set_att.append(copy.deepcopy(df_att))  # check if this goes right
 
-            # add scen to df_att with subset = k_new
-            df_att.loc[new_att, ("subset", 0)] = k_new
         # save every 10 minutes
         if time.time() - start_time - prev_save_time > 10*60:
             prev_save_time = time.time() - start_time
@@ -152,8 +159,8 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
             cum_tot_nodes[time.time() - start_time] = tot_nodes
             tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x,
                             "inc_y": inc_y, "inc_tau": inc_tau, "runtime": time.time() - start_time,
-                            "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time}
-            with open("Results/Decisions/tmp_results_att_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+                            "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
+            with open("Results/Decisions/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
                 pickle.dump([env, tmp_results], handle)
         iteration += 1
     # termination results
@@ -167,15 +174,32 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
     cum_tot_nodes[runtime] = tot_nodes
 
     now = datetime.now().time()
-    print("Instance A {} completed at {}, solved in {} minutes".format(env.inst_num, now, runtime/60))
+    print("Instance OD {} completed at {}, solved in {} minutes".format(env.inst_num, now, runtime/60))
     results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
-                "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time}
-
-    with open("Results/Decisions/final_results_att_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+                "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
+    with open("Results/Decisions/final_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
         pickle.dump([env, results], handle)
 
     try:
-        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type="att")
+        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
     except:
         pass
     return results
+
+
+def init_k_adapt(K, env):
+    tau = {k: [] for k in np.arange(K)}
+    tau[0].append(env.init_uncertainty)
+
+    # run master problem
+    theta, x, y, _ = scenario_fun_build(K, tau, env)
+
+    # run sub problem
+    _, xi_new = separation_fun(K, x, y, theta, env, tau)
+
+    # new tau to be saved in N_set
+    tau = {k: [] for k in np.arange(K)}
+    tau[0] = xi_new.reshape([1, -1])
+
+    return tau
+

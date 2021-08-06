@@ -215,7 +215,7 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=Fals
                            "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes,
                            "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time,
                            "att_time": att_time}
-            with open("Results/Decisions/tmp_results_online_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+            with open("Results/DecisionsOld/tmp_results_online_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
                 pickle.dump([env, tmp_results], handle)
     # termination results
     runtime = time.time() - start_time
@@ -235,7 +235,7 @@ def algorithm_main(K, env, att_series, lr_w=.5, att_crit=.001, weight_group=Fals
                            "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time,
                            "att_time": att_time}
 
-    with open("Results/Decisions/final_results_online_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+    with open("Results/DecisionsOld/final_results_online_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
         pickle.dump([env, results], handle)
 
     try:

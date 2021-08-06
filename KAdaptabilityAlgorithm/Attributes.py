@@ -172,7 +172,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
             tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x,
                             "inc_y": inc_y, "inc_tau": inc_tau, "runtime": time.time() - start_time,
                             "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time}
-            with open("Results/Decisions/tmp_results_att_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+            with open("Results/DecisionsOld/tmp_results_att_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
                 pickle.dump([env, tmp_results], handle)
         iteration += 1
     # termination results
@@ -190,7 +190,7 @@ def algorithm(K, env, att_series, time_limit=20*60, print_info=False, problem_ty
     results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                 "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time, "att_time": att_time}
 
-    with open("Results/Decisions/final_results_att_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+    with open("Results/DecisionsOld/final_results_att_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
         pickle.dump([env, results], handle)
 
     try:
