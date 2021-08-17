@@ -10,8 +10,6 @@ import time
 
 
 def algorithm(K, env, time_limit=20*60, print_info=False, problem_type="test"):
-    # temporary do this
-    trial_num = int(problem_type[-1])
     # Initialize
     iteration = 0
     start_time = time.time()
@@ -32,8 +30,6 @@ def algorithm(K, env, time_limit=20*60, print_info=False, problem_type="test"):
     sp_time = 0
     # initialization of lower and upper bounds
     theta_i, x_i, y_i = (env.upper_bound, [], [])
-    inc_lb = dict()
-    inc_lb[0] = 0
     # K-branch and bound algorithm
     now = datetime.now().time()
     xi_new, k_new = None, None
@@ -83,8 +79,8 @@ def algorithm(K, env, time_limit=20*60, print_info=False, problem_type="test"):
         if zeta <= 1e-04:
             if print_info:
                 now = datetime.now().time()
-                print("Instance R {}, trial {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    zeta = {}   Xi{},   prune count = {}".format(
-                    env.inst_num, trial_num, iteration, np.round(time.time()-start_time, 3), now, np.round(theta, 4), np.round(zeta, 4), [len(t) for t in tau.values()], prune_count))
+                print("Instance R {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    zeta = {}   Xi{},   prune count = {}".format(
+                    env.inst_num, iteration, np.round(time.time()-start_time, 3), now, np.round(theta, 4), np.round(zeta, 4), [len(t) for t in tau.values()], prune_count))
             # try:
             #     env.plot_graph_solutions(K, y, tau, x=x, tmp=True, it=iteration, alg_type=problem_type)
             # except:
@@ -156,7 +152,7 @@ def algorithm(K, env, time_limit=20*60, print_info=False, problem_type="test"):
     cum_tot_nodes[runtime] = tot_nodes
 
     now = datetime.now().time()
-    print("Instance R {}, trial {} completed at {}, solved in {} minutes".format(env.inst_num, trial_num, now, runtime/60))
+    print("Instance R {}, completed at {}, solved in {} minutes".format(env.inst_num, now, runtime/60))
     results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                 "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
 

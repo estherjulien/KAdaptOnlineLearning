@@ -91,6 +91,39 @@ def separation_fun(K, x, y, theta, graph, tau):
     return zeta_sol, xi_sol
 
 
+def scenario_fun_deterministic(graph, scen):
+    smn = gp.Model("Scenario-Based K-Adaptability Problem")
+    N = graph.N
+    # variables
+    theta = smn.addVar(lb=0, vtype=GRB.CONTINUOUS, name="theta")
+    y = smn.addVars(graph.num_arcs, vtype=GRB.BINARY, name="y")
+    # objective function
+    smn.setObjective(theta, GRB.MINIMIZE)
+
+    # deterministic constraints
+    for j in np.arange(graph.N):
+        if j == 0:
+            smn.addConstr(gp.quicksum(y[a] for a in graph.arcs_out[j]) >= 1)
+            continue
+        if j == N - 1:
+            smn.addConstr(gp.quicksum(y[a] for a in graph.arcs_in[j]) >= 1)
+            continue
+        smn.addConstr(
+            gp.quicksum(y[a] for a in graph.arcs_out[j])
+            - gp.quicksum(y[a] for a in graph.arcs_in[j]) >= 0)
+
+    # uncertain constraints
+    smn.addConstr(gp.quicksum((1 + scen[a] / 2) * graph.distances_array[a] * y[a]
+                                     for a in np.arange(graph.num_arcs)) <= theta)
+
+    # solve model
+    smn.Params.OutputFlag = 0
+    smn.optimize()
+    y_sol = [var.X for i, var in y.items()]
+    theta_sol = smn.getVarByName("theta").X
+    return theta_sol, y_sol
+
+
 def scenario_fun_nominal_build(graph):
     smn = gp.Model("Scenario-Based K-Adaptability Problem")
     N = graph.N
