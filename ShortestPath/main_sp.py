@@ -24,7 +24,7 @@ except:
         pickle.dump(env_list, handle)
 
 K = 4
-time_limit = 2*60*60
+time_limit = 20*60
 print("START ONLINE LEARNING \n")
 
 att_series = ["coords", "slack", "const_to_z_dist", "const_to_const_dist"]
