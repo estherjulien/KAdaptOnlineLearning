@@ -1,4 +1,5 @@
 from ShortestPath.Environment.Env import Graph
+from KAdaptabilityAlgorithm.OnlineLearning import algorithm as algorithm_ol
 from joblib import Parallel, delayed
 import numpy as np
 import pickle
@@ -24,23 +25,11 @@ except:
 
 K = 4
 time_limit = 2*60*60
-print("START OBJECTIVE + VIOLATION DIFFERENCE \n")
-# # # algorithm_rand(K, env_list[0], print_info=True)
-# algorithm_obj_viol_rule_test(K, env_list[0], print_info=True)
-problem_type = f"sp_obj_rule_K{K}_N{N}_g{int(gamma_perc*100)}_fs{int(first_stage_ratio*100)}"
-Parallel(n_jobs=thread_count)(delayed(algorithm_obj_rule)(K, env, time_limit=time_limit,
-                                                                    print_info=True,
-                                                                    problem_type=problem_type)
-                              for env in env_list)
+print("START ONLINE LEARNING \n")
 
+att_series = ["coords", "slack", "const_to_z_dist", "const_to_const_dist"]
 
-# print("START RANDOM\n")
-# # RANDOM
-# time_limit = 30*60
-# problem_type = [f"sp_rand_np_K{K}_N{N}_g{int(gamma_perc*100)}_fs{int(first_stage_ratio*100)}_t{t}" for t in np.arange(8)]
-# Parallel(n_jobs=thread_count)(delayed(algorithm_random)(K, env, time_limit=time_limit, print_info=True,
-#                                                         problem_type=pt)
-#                               for env in env_list for pt in problem_type)
+problem_type = f"sp_online_K{K}_N{N}_g{int(gamma_perc*100)}_fs{int(first_stage_ratio*100)}"
+for i in np.arange(num_instances):
+    results = algorithm_ol(K, env_list[i], att_series, problem_type=problem_type, time_limit=time_limit)
 
-
-att_series = ["slack", "const_to_z_dist", "const_to_const_dist"]
