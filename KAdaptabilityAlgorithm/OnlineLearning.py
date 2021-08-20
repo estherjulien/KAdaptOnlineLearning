@@ -36,7 +36,7 @@ def algorithm(K, env, att_series, sub_tree=False, n_back_track=5, time_limit=20*
 
     weight_model_name = f"nn_model_K{K}_{problem_type}_D{depth}_W{width}_inst{env.inst_num}.h5"
     # initialize N_set
-    theta_i, x_i, y_i, N_set, tau_i, N_att_set, tot_nodes_new, init_tot_scens = init_pass(K, env, att_series)
+    theta_i, x_i, y_i, N_set, tau_i, N_att_set, tot_nodes_new, init_tot_scens, init_zeta = init_pass(K, env, att_series)
     # save stuff
     tot_nodes = copy.copy(tot_nodes_new)
     runtime = time.time() - start_time
@@ -74,13 +74,14 @@ def algorithm(K, env, att_series, sub_tree=False, n_back_track=5, time_limit=20*
         # iterative
         # for i in np.arange(pass_num):
         #     results[i], N_set_new[i], N_att_set_new[i] = \
-        #         parallel_pass(K, env, att_series, N_set[i], N_att_set[i], theta_i, init_tot_scens, start_time, att_index,
+        #         parallel_pass(K, env, att_series, N_set[i], N_att_set[i], theta_i, init_zeta, init_tot_scens, start_time, att_index,
         #                       explore_bool=explore_bool[i], weight_model_name=weight_model_name, sub_tree=sub_tree)
         # parallel
         time_before_run = time.time() - start_time
         tot_results = Parallel(n_jobs=thread_count)(delayed(parallel_pass)(K, env, att_series,
                                                                            N_set[i], N_att_set[i],
-                                                                           theta_i, init_tot_scens, att_index,
+                                                                           theta_i, init_zeta,
+                                                                           init_tot_scens, att_index,
                                                                            explore_bool=explore_bool[i],
                                                                            weight_model_name=weight_model_name,
                                                                            sub_tree=sub_tree)
@@ -262,11 +263,11 @@ def algorithm(K, env, att_series, sub_tree=False, n_back_track=5, time_limit=20*
     return results
 
 
-def parallel_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, att_index, explore_bool, weight_model_name, sub_tree=False):
+def parallel_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, att_index, explore_bool, weight_model_name, sub_tree=False):
     if explore_bool:
-        return explore_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, att_index, sub_tree=sub_tree)
+        return explore_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, att_index, sub_tree=sub_tree)
     else:
-        return strategy_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, weight_model_name, att_index)
+        return strategy_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, weight_model_name, att_index)
 
 
 def init_pass(K, env, att_series):
@@ -279,7 +280,7 @@ def init_pass(K, env, att_series):
     new_model = True
 
     # initialize N_set with actual scenario
-    tau, tau_att = init_scen(K, env, att_series)
+    tau, tau_att, init_zeta = init_scen(K, env, att_series)
     N_set = []
     N_att_set = []
     df_att = tau_att.reshape([1, -1])
@@ -359,10 +360,10 @@ def init_pass(K, env, att_series):
             df_att_tmp[-1, 0] = k
             N_att_set.append(df_att_tmp)
     tot_scens = np.sum([len(t) for t in tau.values()])
-    return theta, x, y, N_set, tau, N_att_set, tot_nodes, tot_scens
+    return theta, x, y, N_set, tau, N_att_set, tot_nodes, tot_scens, init_zeta
 
 
-def explore_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, att_index, sub_tree=False):
+def explore_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, att_index, sub_tree=False):
     # Initialize
     tot_nodes = 0
 
@@ -379,7 +380,7 @@ def explore_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, att_ind
     state_data = []
     weight_data = []
     zeta = 0
-    df_att = tau_att.reshape([len(tau_att), -1])
+    df_att = tau_att
 
     now = datetime.now().time()
     print("Instance OL {}: explore pass started at {}".format(env.inst_num, now))
@@ -434,7 +435,7 @@ def explore_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, att_ind
             k_new = np.random.randint(K)
             # STATE DATA
             tot_scens = np.sum([len(t) for t in tau.values()])
-            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_i, df_att, theta_i, att_index)
+            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_i, df_att, theta_i, zeta_i, att_index)
             try:
                 state_data = np.vstack([state_data, tau_s])
             except:
@@ -479,7 +480,7 @@ def explore_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, att_ind
     return results, N_set, N_att_set
 
 
-def strategy_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, weight_model_name, att_index):
+def strategy_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, weight_model_name, att_index):
     # Initialize
     tot_nodes = 0
 
@@ -542,11 +543,10 @@ def strategy_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, weight
             K_set = [0]
             k_new = 0
         elif len(full_list) == K:
-            K_set = np.arange(K)
             # predict subset
             # STATE FEATURES (based on master and sub problem)
             tot_scens = np.sum([len(t) for t in tau.values()])
-            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_i, df_att, theta_i, att_index)
+            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_i, df_att, theta_i, zeta_i, att_index)
             K_set = predict_subset(K, df_att, scen_att, weight_model, att_index, tau_s)
             k_new = K_set[0]
         else:
@@ -591,7 +591,7 @@ def init_scen(K, env, att_series):
     theta, x, y, _ = scenario_fun_build(K, tau, env)
 
     # run sub problem
-    _, xi_new = separation_fun(K, x, y, theta, env, tau)
+    init_zeta, xi_new = separation_fun(K, x, y, theta, env, tau)
 
     # new tau to be saved in N_set
     tau = {k: [] for k in np.arange(K)}
@@ -599,7 +599,7 @@ def init_scen(K, env, att_series):
     tau_att = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y)
     tau_att[0] = 0
 
-    return tau, tau_att
+    return tau, tau_att, init_zeta
 
 
 def sub_tree_pass(K, env, att_series, tau, tau_att, theta_i, tot_scens_i, att_index):

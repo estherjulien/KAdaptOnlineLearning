@@ -132,12 +132,12 @@ def const_to_const_fun(K, scen, env, tau):
     return cos_final
 
 
-def state_features(K, env, theta, zeta, x, y, tot_nodes, tot_nodes_i, df_att, theta_i, att_index):
+def state_features(K, env, theta, zeta, x, y, tot_nodes, tot_nodes_i, df_att, theta_i, zeta_i, att_index):
     features = []
     # objective
     features.append(theta/theta_i)
     # violation
-    features.append(zeta/theta)
+    features.append(zeta/zeta_i)
     # depth
     features.append(tot_nodes/tot_nodes_i)
     # todo: get state features for subsets >> makes it dependent on K

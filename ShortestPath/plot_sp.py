@@ -8,9 +8,20 @@ num_inst = 16
 K = 4
 N = 100
 results = dict()
+results_ol = dict()
+
 for i in np.arange(num_inst):
     with open(f"Results/Decisions/Random/final_results_sp_rand_np_K4_N100_g30_fs30_inst{i}.pickle", "rb") as handle:
         results[i] = pickle.load(handle)[1]
+    with open(f"Results/Decisions/OnlineLearningMP/final_results_sp_online_K4_N100_g30_fs30_inst{i}.pickle", "rb") as handle:
+        results_ol[i] = pickle.load(handle)[1]
+    # theta_rand = results[i]["theta"]
+    # theta_ol = results_ol[i]["theta"]
+    # print(f"Random: {theta_rand}      Online Learning: {theta_ol}")
+    node_rand = list(results[i]["tot_nodes"].values())[-1]
+    node_ol = results_ol[i]["tot_nodes"]
+    print(f"Random: {node_rand}      Online Learning: {node_ol}")
+
 # PLOT RESULTS OVER RUNTIME
 # t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 2*60*60+15, 15)])
 # num_grids = len(t_grid)
