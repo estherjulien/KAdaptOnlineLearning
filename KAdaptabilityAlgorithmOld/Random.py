@@ -9,7 +9,7 @@ import copy
 import time
 
 
-def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
+def algorithm(K, env, time_limit=20*60, print_info=False, problem_type="test"):
     # Initialize
     iteration = 0
     start_time = time.time()
@@ -34,24 +34,16 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
     now = datetime.now().time()
     xi_new, k_new = None, None
 
-    new_model = True
     # initialize N_set with actual scenario
-    tau_i, scen_all = init_k_adapt(K, env)
+    tau_i = init_k_adapt(K, env)
     N_set = [tau_i]
 
-    new_xi_num = 0
-
-    print("Instance R {}: started at {}".format(env.inst_num, now))
+    print("Instance R {}, trial {} started at {}".format(env.inst_num, trial_num, now))
     while N_set and time.time() - start_time < time_limit:
         # MASTER PROBLEM
-        if new_model:
-            try:
-                del model
-            except:
-                pass
+        if xi_new is None:
             # take new node
-            placement = N_set.pop(0)
-            tau = {k: scen_all[placement[k]] for k in np.arange(K)}
+            tau = N_set.pop(0)
             # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_build(K, tau, env)
@@ -59,19 +51,23 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
         else:
             # make new tau from k_new
             tot_nodes += 1
-
+            tau = copy.deepcopy(tau)
+            adj_tau_k = copy.deepcopy(tau[k_new])
+            try:
+                adj_tau_k = np.vstack([adj_tau_k, xi_new])
+            except:
+                adj_tau_k = xi_new.reshape([1, -1])
+            tau[k_new] = adj_tau_k
             # master problem
             start_mp = time.time()
-            theta, x, y, model = scenario_fun_update(K, k_new, xi, env, model)
+            theta, x, y, model = scenario_fun_update(K, k_new, xi_new, env, model)
+            # theta, x, y, model = scenario_fun_build(K, tau, env, return_model=True)
             mp_time += time.time() - start_mp
-
-            placement[k_new].append(new_xi_num)
-            tau = {k: scen_all[placement[k]] for k in np.arange(K)}
-
         # prune if theta higher than current robust theta
         if theta - theta_i > -1e-8:
             prune_count += 1
-            new_model = True
+            xi_new = None
+            k_new = None
             continue
 
         # SUBPROBLEM
@@ -83,11 +79,12 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
         if zeta <= 1e-04:
             if print_info:
                 now = datetime.now().time()
-                print("Instance R {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    zeta = {}   Xi{},   "
-                      "prune count = {}".format(env.inst_num, iteration, np.round(time.time()-start_time, 3), now,
-                                                np.round(theta, 4), np.round(zeta, 4),
-                                                [len(t) for t in placement.values()], prune_count))
-
+                print("Instance R {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    zeta = {}   Xi{},   prune count = {}".format(
+                    env.inst_num, iteration, np.round(time.time()-start_time, 3), now, np.round(theta, 4), np.round(zeta, 4), [len(t) for t in tau.values()], prune_count))
+            # try:
+            #     env.plot_graph_solutions(K, y, tau, x=x, tmp=True, it=iteration, alg_type=problem_type)
+            # except:
+            #     pass
             theta_i, x_i, y_i = (copy.deepcopy(theta), copy.deepcopy(x), copy.deepcopy(y))
             tau_i = copy.deepcopy(tau)
             inc_thetas_t[time.time() - start_time] = theta_i
@@ -96,32 +93,41 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
             inc_x[time.time() - start_time] = x_i
             inc_y[time.time() - start_time] = y_i
             prune_count += 1
-            new_model = True
-            continue
-        else:
-            new_model = False
-            new_xi_num += 1
-            scen_all = np.vstack([scen_all, xi])
-
-        full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
-        if len(full_list) == 0:
-            K_set = [0]
-            k_new = 0
-        elif len(full_list) == K:
-            K_set = np.arange(K)
-            k_new = np.random.randint(K)
-        else:
-            K_prime = min(K, full_list[-1] + 2)
-            K_set = np.arange(K_prime)
-            k_new = K_set[-1]
-
-        for k in K_set:
-            if k == k_new:
+            xi_new = None
+            k_new = None
+            if K == 1:
+                break
+            else:
                 continue
-            # add to node set
-            placement_tmp = copy.deepcopy(placement)
-            placement_tmp[k].append(new_xi_num)
-            N_set.append(placement_tmp)
+        else:
+            xi_new = xi
+
+        if K == 1:
+            N_set = [1]
+        else:
+            full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
+            if len(full_list) == 0:
+                K_set = [0]
+                k_new = 0
+            elif len(full_list) == K:
+                K_set = np.arange(K)
+                k_new = np.random.randint(K)
+            else:
+                K_prime = min(K, full_list[-1] + 2)
+                K_set = np.arange(K_prime)
+                k_new = K_set[-1]
+
+            for k in K_set:
+                if k == k_new:
+                    continue
+                tau_tmp = copy.deepcopy(tau)
+                adj_tau_k = copy.deepcopy(tau_tmp[k])
+                try:
+                    adj_tau_k = np.vstack([adj_tau_k, xi_new])
+                except:
+                    adj_tau_k = xi_new.reshape([1, -1])
+                tau_tmp[k] = adj_tau_k
+                N_set.append(tau_tmp)
 
         # save every 10 minutes
         if time.time() - start_time - prev_save_time > 10*60:
@@ -129,10 +135,9 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
             # also save inc_tot_nodes
             inc_tot_nodes[time.time() - start_time] = len(N_set)
             cum_tot_nodes[time.time() - start_time] = tot_nodes
-            tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "inc_thetas_t": inc_thetas_t,
-                           "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
-                           "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes,
-                           "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
+            tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x,
+                            "inc_y": inc_y, "inc_tau": inc_tau, "runtime": time.time() - start_time,
+                            "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
             with open("Results/Decisions/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
                 pickle.dump([env, tmp_results], handle)
         iteration += 1
@@ -148,12 +153,10 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
 
     now = datetime.now().time()
     print("Instance R {}, completed at {}, solved in {} minutes".format(env.inst_num, now, runtime/60))
-    results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t,
-               "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
-               "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes,
-               "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all}
+    results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t, "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
+                "runtime": time.time() - start_time, "tot_nodes": cum_tot_nodes, "num_nodes_curr": inc_tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
 
-    with open(f"Results/Decisions/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+    with open("Results/Decisions/final_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
         pickle.dump([env, results], handle)
 
     try:
@@ -175,7 +178,7 @@ def init_k_adapt(K, env):
 
     # new tau to be saved in N_set
     tau = {k: [] for k in np.arange(K)}
-    tau[0].append(0)
+    tau[0] = xi_new.reshape([1, -1])
 
-    scen_all = xi_new.reshape([1, -1])
-    return tau, scen_all
+    return tau
+

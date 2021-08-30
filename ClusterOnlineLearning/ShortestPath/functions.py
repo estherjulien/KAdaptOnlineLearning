@@ -156,43 +156,4 @@ def scenario_fun_deterministic(graph, scen):
     return theta_sol, y_sol
 
 
-def scenario_fun_nominal_build(graph):
-    smn = gp.Model("Scenario-Based K-Adaptability Problem")
-    N = graph.N
-    # variables
-    theta = smn.addVar(lb=0, vtype=GRB.CONTINUOUS, name="theta")
-    y = smn.addVars(graph.num_arcs, vtype=GRB.BINARY, name="y")
-    # objective function
-    smn.setObjective(theta, GRB.MINIMIZE)
-
-    # deterministic constraints
-    for j in np.arange(graph.N):
-        if j == 0:
-            smn.addConstr(gp.quicksum(y[a] for a in graph.arcs_out[j]) >= 1)
-            continue
-        if j == N - 1:
-            smn.addConstr(gp.quicksum(y[a] for a in graph.arcs_in[j]) >= 1)
-            continue
-        smn.addConstr(
-            gp.quicksum(y[a] for a in graph.arcs_out[j])
-            - gp.quicksum(y[a] for a in graph.arcs_in[j]) >= 0)
-
-    # solve model
-    smn.Params.OutputFlag = 0
-    smn.optimize()
-    return smn
-
-
-def scenario_fun_nominal_update(graph, scen, smn):
-    y = {a: smn.getVarByName(f"y[{a}]") for a in np.arange(graph.num_arcs)}
-    theta = smn.getVarByName("theta")
-    # uncertain constraints
-    smn.addConstr(gp.quicksum((1 + scen[a] / 2) * graph.distances_array[a] * y[a]
-                                     for a in np.arange(graph.num_arcs)) <= theta)
-    smn.update()
-    # solve model
-    smn.optimize()
-    y_sol = {i: var.X for i, var in y.items()}
-    theta_sol = smn.getVarByName("theta").X
-    return theta_sol, None, y_sol
 

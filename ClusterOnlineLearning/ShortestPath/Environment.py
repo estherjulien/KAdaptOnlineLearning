@@ -33,9 +33,6 @@ class Graph:
         self.max_first_stage = dist_to_N*first_stage_ratio
         self.gamma = num_arcs_used * gamma_perc
         self.act_gamma_perc = self.gamma/self.num_arcs
-        print(f"Instance {self.inst_num}: actual gamma perc = {self.act_gamma_perc}")
-        # plot graph
-        self.plot_graph()
 
     def plot_graph(self):
         arcs = self.arcs
@@ -203,8 +200,6 @@ class Graph:
                         arcs[i, j] = 0
             if self.isconnected(self, arcs):
                 connected = True
-            else:
-                print("again")
 
         return vertices, arcs
 

@@ -1,6 +1,6 @@
 from CapitalBudgetingLoans.Environment.Env import ProjectsInstance
 from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
-from KAdaptabilityAlgorithm.Random import algorithm as algorithm_random
+from KAdaptabilityAlgorithmOld.Random import algorithm as algorithm_random
 from joblib import Parallel, delayed
 
 num_cores = 4
@@ -15,9 +15,7 @@ time_limit = 20*60
 #                                                                 k_adapt_centroid_tau=k_adapt_centroid_tau,
 #                                                                 time_limit=time_limit, print_info=True)
 
-results = Parallel(n_jobs=num_cores)(delayed(algorithm_random)(K, env_list[i], scenario_fun_build, scenario_fun_update,
-                                                               separation_fun,
-                                                               k_adapt_centroid_tau=k_adapt_centroid_tau,
+results = Parallel(n_jobs=num_cores)(delayed(algorithm_random)(K, env_list[i],
                                                                time_limit=time_limit, print_info=True,
                                                                problem_type=f"cp_K{K}_N{N}_d{xi_dim}")
                                                                 for i in range(num_cores*5))
