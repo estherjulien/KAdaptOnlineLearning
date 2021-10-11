@@ -14,8 +14,7 @@ import copy
 import time
 
 
-# TODO: CHECK FOR ONLINELEARNINGMAX WHAT HAS TO BE CHANGED
-def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 * 60, problem_type="test",
+def algorithm(K, env, att_series, n_back_track=2, time_limit=20 * 60, problem_type="test",
               thread_count=8, depth=1, width=50, max_depth=5):
     # Initialize
     iteration = 0
@@ -37,7 +36,7 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
     # K-branch and bound algorithm
     now = datetime.now().time()
 
-    success_model_name = f"nn_model_alt_{problem_type}_D{depth}_W{width}_inst{env.inst_num}.h5"
+    success_model_name = f"Results/NNModels/nn_model_alt_{problem_type}_D{depth}_W{width}_inst{env.inst_num}.h5"
 
     # FOR STATIC ATTRIBUTE
     try:
@@ -76,6 +75,8 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
                 pass
             else:
                 num_strategy = max(0, num_strategy - 1)
+        elif iteration > 1 and num_strategy == 0:
+            num_strategy = 1
         else:
             pass
         explore_bool = [*[True] * (thread_count - num_strategy), *[False] * num_strategy]
@@ -83,11 +84,6 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
         N_set_new = dict()
         N_att_set_new = dict()
 
-        # iterative
-        # for i in np.arange(pass_num):
-        #     results[i], N_set_new[i], N_att_set_new[i] = \
-        #         parallel_pass(K, env, att_series, N_set[i], N_att_set[i], theta_i, zeta_init, init_tot_scens, start_time, att_index,
-        #                       explore_bool=explore_bool[i], success_model_name=success_model_name, sub_tree=sub_tree)
         # parallel
         time_before_run = time.time() - start_time
         tot_results = Parallel(n_jobs=thread_count)(delayed(parallel_pass)(K, env, att_series,
@@ -96,7 +92,6 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
                                                                            init_tot_scens, att_index,
                                                                            explore_bool=explore_bool[i],
                                                                            success_model_name=success_model_name,
-                                                                           sub_tree=sub_tree,
                                                                            x_static=x_static)
                                                     for i in np.arange(pass_num))
         for i in np.arange(pass_num):
@@ -168,45 +163,35 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
         else:
             strat_rand_ratio = 1
 
-        old_data_len = len(input_data)
         # SELECT EXPERTS
-        if sub_tree:
-            new_experts_list = []
-            for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
-                if pass_score[i] < 1.02 and len(explore_results[i]["input_data"]) > 1:
-                    # change state and weight data for exploring "expert" results of sub-tree
-                    new_experts_list.append(i)
+        new_experts_list = []
+        for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
+            if pass_score[i] < 1.02 and len(explore_results[i]["input_data"]) > 1:
+                # change state and weight data for exploring "expert" results of sub-tree
+                new_experts_list.append(i)
 
-            time_before_run = time.time() - start_time
-            tmp_expert_results = Parallel(n_jobs=thread_count)(delayed(sub_tree_pass)(K, env, att_series,
-                                                                                      explore_results[i]["sub_tree"],
-                                                                                      explore_results[i]["input_data"],
-                                                                                      explore_results[i]["success_data"],
-                                                                                      n_back_track,
-                                                                                      theta_i_old,
-                                                                                      theta_init,
-                                                                                      zeta_init, init_tot_scens,
-                                                                                      att_index, i, max_depth,
-                                                                                      x_static=x_static)
-                                                               for i in new_experts_list)
+        time_before_run = time.time() - start_time
+        tmp_expert_results = Parallel(n_jobs=thread_count)(delayed(sub_tree_pass)(K, env, att_series,
+                                                                                  explore_results[i]["sub_tree"],
+                                                                                  explore_results[i]["input_data"],
+                                                                                  explore_results[i]["success_data"],
+                                                                                  n_back_track,
+                                                                                  theta_i_old,
+                                                                                  theta_init,
+                                                                                  zeta_init, init_tot_scens,
+                                                                                  att_index, i, max_depth,
+                                                                                  x_static=x_static)
+                                                           for i in new_experts_list)
 
-            expert_results = []
-            new_experts = 0
-            for results, runtime, tot_nodes_new, i_explore in tmp_expert_results:
-                if results is None:
-                    # SCORE
-                    if pass_score[i_explore] < 1.001:
-                        new_experts += 1
-                        expert_results.append(explore_results[i_explore])
-                    tot_nodes += tot_nodes_new
-                    continue
-                # SCORE
-                score = (results["theta"] / theta_i_old) * max([results["zeta"] / zeta_init + 1, 1])
-                if score < 1.001:
+        expert_results = []
+        new_experts = 0
+        for results_all, runtime, tot_nodes_new, i_explore in tmp_expert_results:
+            for results in results_all:
+                if results["zeta"] < 1e-4:
                     new_experts += 1
                     expert_results.append(results)
-                    if results["zeta"] < 1e-4 and results["theta"] - theta_i < -1e-8:
-                        # RESULT ROBUST
+                    if results["theta"] - theta_i < -1e-8:
+                        # NEW INCUMBENT SOLUTION
                         now = datetime.now().time()
                         theta_i, x_i, y_i = (results["theta"], results["x"], results["y"])
                         tau_i = copy.deepcopy(results["tau"])
@@ -222,45 +207,33 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
                         inc_x[time_before_run + runtime] = x_i
                         inc_y[time_before_run + runtime] = y_i
                         inc_tot_nodes[time_before_run + runtime] = tot_nodes + tot_nodes_new
-                # always
-                tot_nodes += tot_nodes_new
+            # always
+            tot_nodes += tot_nodes_new
 
-            sub_tree_input_data = []
-            sub_tree_success_data = []
-            for results in expert_results:
-                try:
-                    sub_tree_input_data = np.vstack([sub_tree_input_data, results["input_data"]])
-                except ValueError:
-                    sub_tree_input_data = results["input_data"]
-                try:
-                    sub_tree_success_data = np.vstack([sub_tree_success_data, results["success_data"]])
-                except ValueError:
-                    sub_tree_success_data = results["success_data"]
-            # only add unique results
+        sub_tree_input_data = []
+        sub_tree_success_data = []
+        for r in expert_results:
+            try:
+                sub_tree_input_data = np.vstack([sub_tree_input_data, r["input_data"]])
+            except ValueError:
+                sub_tree_input_data = r["input_data"]
+            sub_tree_success_data = np.hstack([sub_tree_success_data, r["success_data"]])
 
+        # only add unique results
+        if len(sub_tree_success_data) > 0:
+            unique_data = np.unique(np.hstack([sub_tree_input_data, sub_tree_success_data.reshape([-1, 1])]), axis=0)
+            try:
+                input_data = np.vstack([input_data, unique_data[:, :-1]])
+            except ValueError:
+                input_data = unique_data[:, :-1]
+            success_data = np.hstack([success_data, unique_data[:, -1]])
 
-        else:
-            for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
-                if pass_score[i] < 1.001 and len(explore_results[i]["input_data"]) > 1:
-                    # if score diverges 10 percent from best one, add it
-                    # add state and weight data
-                    try:
-                        input_data = np.vstack([input_data, explore_results[i]["input_data"]])
-                    except ValueError:
-                        input_data = explore_results[i]["input_data"]
-                    try:
-                        success_data = np.vstack([success_data, explore_results[i]["success_data"]])
-                    except ValueError:
-                        success_data = explore_results[i]["success_data"]
-                    new_experts += 1
-
-        # update success model
-        if new_experts > 0 and len(input_data[-new_experts:]):
-            new_expert_data = len(input_data) - old_data_len
-            print(f"Instance OL {env.inst_num}: update weights with {new_experts} new experts. "
+            # update success model
+            new_expert_data = len(unique_data)
+            print(f"Instance OL {env.inst_num}: update weights with {new_experts} new experts, {new_expert_data} new data points. "
                   f"ratio = {strat_rand_ratio}, tot_data_points = {len(input_data)}")
-            update_model_fun(input_data[-new_expert_data:], success_data[-new_expert_data:], depth=depth, width=width,
-                             success_model_name=success_model_name)
+            update_model_fun(input_data, success_data, expert_data_num=new_expert_data, depth=depth,
+                                                width=width, success_model_name=success_model_name)
 
         # save every 10 minutes
         if time.time() - start_time - prev_save_time > 10 * 60:
@@ -302,13 +275,13 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
 
 
 def parallel_pass(K, env, att_series, tau, tau_att, theta_i, theta_init, zeta_init, tot_scens_init, att_index, explore_bool,
-                  success_model_name, x_static=None, normalize_values=None):
+                  success_model_name, x_static=None):
     if explore_bool:
         return explore_pass(K, env, att_series, tau, tau_att, theta_i, theta_init, zeta_init, tot_scens_init, att_index,
                             x_static=x_static)
     else:
         return strategy_pass(K, env, att_series, tau, tau_att, theta_i, theta_init, zeta_init, tot_scens_init, success_model_name,
-                             att_index, x_static=x_static, normalize_values=normalize_values)
+                             att_index, x_static=x_static)
 
 
 def init_pass(K, env, att_series, x_static=None):
@@ -536,7 +509,7 @@ def explore_pass(K, env, att_series, tau, tau_att, theta_i, theta_init, zeta_ini
 
 
 def strategy_pass(K, env, att_series, tau, tau_att, theta_i, theta_init, zeta_init, tot_scens_init, success_model_name, att_index,
-                  x_static=None, normalize_values=None):
+                  x_static=None):
     # Initialize
     tot_nodes = 0
 
@@ -614,7 +587,7 @@ def strategy_pass(K, env, att_series, tau, tau_att, theta_i, theta_init, zeta_in
             tot_scens = np.sum([len(t) for t in tau.values()])
             tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_init, tau_att, theta_init, zeta_init,
                                    att_index)
-            K_set = predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, tau_s, normalize_values)
+            K_set = predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, tau_s)
             k_new = K_set[0]
         else:
             K_prime = min(K, full_list[-1] + 2)

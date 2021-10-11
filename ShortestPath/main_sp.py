@@ -1,6 +1,7 @@
 from ShortestPath.Environment.Env import Graph
 from KAdaptabilityAlgorithm.Random import algorithm as algorithm_r
-from KAdaptabilityAlgorithm.OnlineLearning import algorithm as algorithm_o
+from SuccessPrediction.OnlineLearning import algorithm as algorithm_o
+from SuccessPrediction.Strategy import algorithm as algorithm_s
 from joblib import Parallel, delayed
 import numpy as np
 import pickle
@@ -45,23 +46,5 @@ for N in [30, 40, 50]:
     Parallel(n_jobs=thread_count)(delayed(algorithm_r)(K, env_list[i], problem_type=problem_type,
                                                        time_limit=time_limit) for i in np.arange(num_instances))
 
-# print("START STRATEGY OTHER\n")
-#
-# att_series = ["coords", "obj_det", "y_det", "slack", "const_to_z_dist", "const_to_const_dist"]
-# problem_type = f"sp_strategy_sub_tree_other_K{K}_N{N}_g{int(gamma_perc*100)}_fs{int(first_stage_ratio*100)}"
-# Parallel(n_jobs=thread_count)(delayed(algorithm_s)(K, env_list[i], att_series, problem_type=problem_type,
-#                                                    time_limit=time_limit) for i in np.arange(num_instances))
-#
-# print("START ONLINE LEARNING RANDOM\n")
-#
-# problem_type = f"sp_online_learning_random_K{K}_N{N}_g{int(gamma_perc*100)}_fs{int(first_stage_ratio*100)}"
-# for i in np.arange(num_instances):
-#     algorithm_ol(K, env_list[i], att_series, sub_tree=False, problem_type=problem_type, time_limit=30*60, depth=1, width=50)
-#
-# problem_type = f"sp_strategy_random_K{K}_N{N}_g{int(gamma_perc*100)}_fs{int(first_stage_ratio*100)}"
 
-# print("START STRATEGY RANDOM\n")
-# Parallel(n_jobs=thread_count)(delayed(algorithm_s)(K, env_list[i], att_series, problem_type=problem_type,
-#                                                    weight_model_name=model_names[i],
-#                                                    time_limit=time_limit) for i in np.arange(num_instances))
-
+att_series = ["coords", "obj_det", "y_det", "slack", "const_to_z_dist", "const_to_const_dist", ""]

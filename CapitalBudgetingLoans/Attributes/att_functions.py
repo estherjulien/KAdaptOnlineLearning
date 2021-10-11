@@ -259,14 +259,10 @@ def weight_labels(K, X, X_scen, k_new, att_index):
     return weights
 
 
-# TODO 1: DINGETJES AANPASSEN DIE K DEPENDENT ZIJN, WILLEN WE NIET
-# TODO 2: AANGEVEN WAT NORMALIZED DIENT TE WORDEN
 def init_weights_fun(K, env, att_series, init_weights=None):
     # create list of attributes
     weight_val = []
     att_index = []
-    # first 3 of state features
-    normalize = [True, True, True]
 
     if "coords" in att_series:
         # weights
@@ -276,8 +272,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             weight_val += [1.0 for i in np.arange(env.xi_dim)]
         # index
         att_index.append(np.arange(env.xi_dim))
-        # normalize
-        normalize.append(True)
     if "obj_det" in att_series:
         # weights
         try:
@@ -290,8 +284,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + 1))
         except:
             att_index.append(np.arange(1))
-        # normalize
-        normalize.append(True)
     if "x_det" in att_series:
         # weights
         try:
@@ -304,8 +296,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + env.x_dim))
         except:
             att_index.append(np.arange(env.x_dim))
-        # normalize
-        normalize.append(True)
     if "y_det" in att_series:
         # weights
         try:
@@ -318,8 +308,7 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + env.y_dim))
         except:
             att_index.append(np.arange(env.y_dim))
-        # normalize
-        normalize.append(True)
+
     if "obj_stat" in att_series:
         # weights
         try:
@@ -332,8 +321,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + 1))
         except:
             att_index.append(np.arange(1))
-        # normalize
-        normalize.append(True)
     if "y_stat" in att_series:
         # weights
         try:
@@ -346,8 +333,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + env.y_dim))
         except:
             att_index.append(np.arange(env.y_dim))
-        # normalize
-        normalize.append(True)
     if "slack" in att_series:
         # weights
         try:
@@ -360,8 +345,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + 2))
         except:
             att_index.append(np.arange(2))
-        # normalize
-        normalize.append(False)
     if "const_to_z_dist" in att_series:
         # weights
         try:
@@ -374,8 +357,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + 2))
         except:
             att_index.append(np.arange(2))
-        # normalize
-        normalize.append(False)
     if "const_to_const_dist" in att_series:
         # weights
         try:
@@ -388,11 +369,9 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + 2))
         except:
             att_index.append(np.arange(2))
-        # normalize
-        normalize.append(False)
 
     weights = np.array(weight_val)
-    return weights, att_index, normalize
+    return weights, att_index
 
 
 def update_weights_fun(state_features, weight_data, depth=1, width=10, weight_model_name="test"):

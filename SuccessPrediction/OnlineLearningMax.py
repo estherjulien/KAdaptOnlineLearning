@@ -54,8 +54,7 @@ def algorithm_max(K, env, att_series, n_back_track=2, time_limit=20 * 60, proble
     inc_y[runtime] = y_i
     inc_tot_nodes[runtime] = tot_nodes
 
-    normalize_values = None
-    _, att_index, normalize = init_weights_fun(K, env, att_series)
+    _, att_index = init_weights_fun(K, env, att_series)
     new_experts = 0
     strat_rand_ratio = 1
     print("Instance OL {}: started at {}".format(env.inst_num, now))
@@ -89,8 +88,7 @@ def algorithm_max(K, env, att_series, n_back_track=2, time_limit=20 * 60, proble
                                                                            init_tot_scens, att_index,
                                                                            explore_bool=explore_bool[i],
                                                                            success_model_name=success_model_name,
-                                                                           x_static=x_static,
-                                                                           normalize_values=normalize_values)
+                                                                           x_static=x_static)
                                                     for i in np.arange(pass_num))
         for i in np.arange(pass_num):
             results[i], N_set_new[i], N_att_set_new[i] = tot_results[i]
@@ -161,7 +159,6 @@ def algorithm_max(K, env, att_series, n_back_track=2, time_limit=20 * 60, proble
         else:
             strat_rand_ratio = 1
 
-        old_data_len = len(input_data)
         # SELECT EXPERTS
         new_experts_list = []
         for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
@@ -229,8 +226,8 @@ def algorithm_max(K, env, att_series, n_back_track=2, time_limit=20 * 60, proble
             new_expert_data = len(unique_data)
             print(f"Instance OL {env.inst_num}: update weights with {new_experts} new experts, {new_expert_data} new data points. "
                   f"ratio = {strat_rand_ratio}, tot_data_points = {len(input_data)}")
-            normalize_values = update_model_fun(input_data, success_data, expert_data_num=new_expert_data, depth=depth,
-                                                width=width, success_model_name=success_model_name, normalize=normalize)
+            update_model_fun(input_data, success_data, expert_data_num=new_expert_data, depth=depth,
+                                                width=width, success_model_name=success_model_name)
 
         # save every 10 minutes
         if time.time() - start_time - prev_save_time > 10 * 60:

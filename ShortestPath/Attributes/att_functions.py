@@ -35,37 +35,45 @@ def predict_subset(K, X, X_scen, weight_model, att_index, state_features):
     return order
 
 
-def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y, static_x=None, stat_model=None, det_model=None):
+def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y, x_static=None, stat_model=None, det_model=None):
     # create list of attributes
     # subset is first value
     sr_att = []
+    sr_att_k = {k: [] for k in np.arange(K)}
 
     if "coords" in att_series:
         for i in np.arange(env.xi_dim):
             sr_att.append(scen[i])
-    if "slack" in att_series:
-        slack = slack_fun(K, scen, env, theta, x, y)
-        sr_att += slack
-    if "const_to_z_dist" in att_series:
-        c_to_z = const_to_z_fun(K, scen, env, theta, x, y)
-        sr_att += c_to_z
-    if "const_to_const_dist" in att_series:
-        c_to_c = const_to_const_fun(K, scen, env, tau)
-        for k in np.arange(K):
-            sr_att.append(c_to_c[k])
 
     # based on other problems
     # deterministic problem
-    if "obj_det" in att_series or "y_det" in att_series:
-        theta_det, y_det = scenario_fun_deterministic_update(env, scen, det_model)
+    if "obj_det" in att_series or "x_det" in att_series or "y_det" in att_series:
+        theta_det, x_det, y_det = scenario_fun_deterministic_update(env, scen, det_model)
     if "obj_det" in att_series:
-        sr_att.append(theta_det)
+        sr_att.append(theta_det / theta)
+    if "x_det" in att_series:
+        sr_att += [x_det[0] / env.max_loan]
+        sr_att += x_det[1]
     if "y_det" in att_series:
-        sr_att += y_det
+        sr_att += [y_det[0] / env.max_loan]
+        sr_att += y_det[1]
 
     # static problem doesn't exist for shortest path
 
-    return np.array(sr_att)
+    # k dependent
+    if "slack" in att_series:
+        slack = slack_fun(K, scen, env, theta, x, y)
+        for k in np.arange(K):
+            sr_att_k[k] += slack[k]
+    if "const_to_z_dist" in att_series:
+        c_to_z = const_to_z_fun(K, scen, env, theta, x, y)
+        for k in np.arange(K):
+            sr_att_k[k] += c_to_z[k]
+    if "const_to_const_dist" in att_series:
+        c_to_c = const_to_const_fun(K, scen, env, tau)
+        for k in np.arange(K):
+            sr_att_k[k] += c_to_c[k]
+    return sr_att, sr_att_k
 
 
 def slack_fun(K, scen, env, theta, x, y):
@@ -73,13 +81,13 @@ def slack_fun(K, scen, env, theta, x, y):
     for k in np.arange(K):
         slack.append(abs(sum((1 + scen[a] / 2) * env.distances_array[a] * y[k][a] for a in np.arange(env.num_arcs)) - theta))
 
-    slack_final = []
+    slack_final = {k: [] for k in np.arange(K)}
     sum_slack = sum(slack)
     for k in np.arange(K):
         if sum_slack == 0:
-            slack_final.append(0)
+            slack_final[k].append(0)
         else:
-            slack_final.append(slack[k]/sum_slack)
+            slack_final[k].append(slack[k]/sum_slack)
 
     return slack_final
 
@@ -97,10 +105,10 @@ def const_to_z_fun(K, scen, env, theta, x, y):
         # take distance
         dist.append((sum([coeff_1[a] * scen[a] for a in np.arange(env.num_arcs)]) + const_1) / (np.sqrt(sum(coeff_1[a] ** 2 for a in np.arange(env.num_arcs)))))
 
-    dist_final = []
+    dist_final = {k: [] for k in np.arange(K)}
     sum_dist = sum(dist)
     for k in np.arange(K):
-        dist_final.append(dist[k]/sum_dist)
+        dist_final[k].append(dist[k]/sum_dist)
 
     return dist_final
 
@@ -127,11 +135,7 @@ def const_to_const_fun(K, scen, env, tau):
         # select cos with most similarity, so max cos
         cos.append(max(cos_tmp))
 
-    cos_final = []
-    for k in np.arange(K):
-        cos_final.append(cos[k])
-
-    return cos_final
+    return {k: list(np.nan_to_num(cos[k], nan=0.0)) for k in np.arange(K)}
 
 
 def state_features(K, env, theta, zeta, x, y, tot_nodes, tot_nodes_i, df_att, theta_i, zeta_i, att_index):
@@ -142,7 +146,6 @@ def state_features(K, env, theta, zeta, x, y, tot_nodes, tot_nodes_i, df_att, th
     features.append(zeta/zeta_i)
     # depth
     features.append(tot_nodes/tot_nodes_i)
-    # todo: get state features for subsets >> makes it dependent on K
 
     return np.array(features)
 
@@ -190,42 +193,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             weight_val += [1.0 for i in np.arange(env.xi_dim)]
         # index
         att_index.append(np.arange(env.xi_dim))
-    if "slack" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["slack_K"] for k in np.arange(K)]
-        except:
-            weight_val += [1.0 for k in np.arange(K)]
-        # index
-        try:
-            last_index = att_index[-1][-1]
-            att_index.append(np.arange(last_index + 1, last_index + 1 + K))
-        except:
-            att_index.append(np.arange(K))
-    if "const_to_z_dist" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["c_to_z_K"] for k in np.arange(K)]
-        except:
-            weight_val += [1.0 for k in np.arange(K)]
-        # index
-        try:
-            last_index = att_index[-1][-1]
-            att_index.append(np.arange(last_index + 1, last_index + 1 + K))
-        except:
-            att_index.append(np.arange(K))
-    if "const_to_const_dist" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["c_to_c_K"] for k in np.arange(K)]
-        except:
-            weight_val += [1.0 for k in np.arange(K)]
-        # index
-        try:
-            last_index = att_index[-1][-1]
-            att_index.append(np.arange(last_index + 1, last_index + 1 + K))
-        except:
-            att_index.append(np.arange(K))
     if "obj_det" in att_series:
         # weights
         try:
@@ -286,6 +253,42 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(last_index + 1, last_index + 1 + env.y_dim))
         except:
             att_index.append(np.arange(env.y_dim))
+    if "slack" in att_series:
+        # weights
+        try:
+            weight_val += [init_weights["slack_K"]]
+        except:
+            weight_val += [1.0]
+        # index
+        try:
+            last_index = att_index[-1][-1]
+            att_index.append(np.arange(last_index + 1, last_index + 1 + 1))
+        except:
+            att_index.append(np.arange(1))
+    if "const_to_z_dist" in att_series:
+        # weights
+        try:
+            weight_val += [init_weights["c_to_z_K"]]
+        except:
+            weight_val += [1.0]
+        # index
+        try:
+            last_index = att_index[-1][-1]
+            att_index.append(np.arange(last_index + 1, last_index + 1 + 1))
+        except:
+            att_index.append(np.arange(1))
+    if "const_to_const_dist" in att_series:
+        # weights
+        try:
+            weight_val += [init_weights["c_to_c_K"]]
+        except:
+            weight_val += [1.0]
+        # index
+        try:
+            last_index = att_index[-1][-1]
+            att_index.append(np.arange(last_index + 1, last_index + 1 + 1))
+        except:
+            att_index.append(np.arange(1))
 
     weights = np.array(weight_val)
     return weights, att_index
