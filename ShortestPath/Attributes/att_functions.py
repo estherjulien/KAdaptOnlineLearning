@@ -4,11 +4,10 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.models import load_model
 
-import pandas as pd
 import numpy as np
 
 
-def predict_subset(K, X, X_scen, weight_model, att_index, state_features, instance):
+def predict_subset(K, X, X_scen, weight_model, att_index, state_features):
     num_att = len(X_scen)
     # predict weights
     weight_type = weight_model.predict(state_features.reshape([1, -1]))[0]
@@ -36,7 +35,7 @@ def predict_subset(K, X, X_scen, weight_model, att_index, state_features, instan
     return order
 
 
-def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y, static_x=None):
+def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y, static_x=None, stat_model=None, det_model=None):
     # create list of attributes
     # subset is first value
     sr_att = []
@@ -58,7 +57,7 @@ def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y, static_x=None
     # based on other problems
     # deterministic problem
     if "obj_det" in att_series or "y_det" in att_series:
-        theta_det, y_det = scenario_fun_deterministic(env, scen)
+        theta_det, y_det = scenario_fun_deterministic_update(env, scen, det_model)
     if "obj_det" in att_series:
         sr_att.append(theta_det)
     if "y_det" in att_series:
@@ -129,9 +128,8 @@ def const_to_const_fun(K, scen, env, tau):
         cos.append(max(cos_tmp))
 
     cos_final = []
-    sum_cos = sum(cos)
     for k in np.arange(K):
-        cos_final.append(cos[k]/sum_cos)
+        cos_final.append(cos[k])
 
     return cos_final
 
@@ -155,7 +153,7 @@ def weight_labels(K, X, X_scen, k_new, att_index):
 
     X_dist = dict()
     for k in np.arange(K):
-        X_dist[k] = np.zeros([len(X[k]), 1 + num_att])
+        X_dist[k] = np.zeros([len(X[k]), num_att])
         for scen in np.arange(len(X[k])):
             X_dist[k][scen] = (X[k][scen] - X_scen)**2
 

@@ -50,7 +50,7 @@ def scenario_fun_build(K, tau, graph):
     # switch point without extra variable
     scen_model.addConstr(gp.quicksum(gp.quicksum(x[a] for a in graph.arcs_in[j]) - gp.quicksum(x[a] for a in graph.arcs_out[j]) for j in np.arange(1, graph.N-1)) == 1)
     # outside range
-    scen_model.addConstrs(x[a] == 0 for j in graph.outside_range for a in graph.arcs_out[j])
+    # scen_model.addConstrs(x[a] == 0 for j in graph.outside_range for a in graph.arcs_out[j])
 
     # second stage
     for k in np.arange(K):

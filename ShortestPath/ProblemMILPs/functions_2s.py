@@ -47,10 +47,10 @@ def scenario_fun_build(K, tau, graph):
 
     # first stage
     scen_model.addConstr(gp.quicksum(x[a] for a in graph.arcs_out[0]) >= 1)
-    # switch point without extra variable
+    # switch point
     scen_model.addConstr(gp.quicksum(gp.quicksum(x[a] for a in graph.arcs_in[j]) - gp.quicksum(x[a] for a in graph.arcs_out[j]) for j in np.arange(1, graph.N-1)) == 1)
     # outside range
-    scen_model.addConstrs(x[a] == 0 for j in graph.outside_range for a in graph.arcs_out[j])
+    # scen_model.addConstrs(x[a] == 0 for j in graph.outside_range for a in graph.arcs_out[j])
 
     # second stage
     for k in np.arange(K):
@@ -121,7 +121,7 @@ def separation_fun(K, x, y, theta, graph, tau):
     sep_model.addConstr(gp.quicksum(xi[a] for a in np.arange(graph.num_arcs)) <= graph.gamma)
 
     for k in np.arange(K):
-        if tau[k]:
+        if len(tau[k]) > 0:
             # first stage constraint
             sep_model.addConstr(zeta <= -(gp.quicksum((1 + xi[a] / 2) * graph.distances_array[a] * x[a] for a in np.arange(graph.num_arcs)))
                                  + graph.max_first_stage + graph.bigM * (1 - z[k][0]))
@@ -135,6 +135,46 @@ def separation_fun(K, x, y, theta, graph, tau):
     zeta_sol = zeta.X
     xi_sol = np.array([var.X for i, var in xi.items()])
     return zeta_sol, xi_sol
+
+
+def scenario_fun_update_sub_tree(K, new_node, xi_dict, graph, scen_model=None):
+    # use same model and just add new constraint
+    x = {a: scen_model.getVarByName(f"x[{a}]") for a in np.arange(graph.num_arcs)}
+    y = dict()
+    for k in np.arange(K):
+        y[k] = {a: scen_model.getVarByName("y_{}[{}]".format(k, a)) for a in np.arange(graph.num_arcs)}
+    theta = scen_model.getVarByName("theta")
+
+    for node_sec in np.arange(1, len(new_node)):
+        xi_new = xi_dict[new_node[:node_sec]]
+        k_new = new_node[node_sec]
+        # first stage constraint
+        scen_model.addConstr(
+            gp.quicksum((1 + xi_new[a] / 2) * graph.distances_array[a] * x[a] for a in np.arange(graph.num_arcs))
+            >= graph.max_first_stage, name=f"const1_{new_node[:node_sec]}_{k_new}")
+        # objective function
+        scen_model.addConstr(gp.quicksum((1 + xi_new[a] / 2) * graph.distances_array[a] * (x[a] + y[k][a])
+                                         for a in np.arange(graph.num_arcs)) <= theta, name=f"const2_{new_node[:node_sec]}_{k_new}")
+    scen_model.update()
+
+    # solve model
+    scen_model.Params.OutputFlag = 0
+    scen_model.optimize()
+    x_sol = {i: var.X for i, var in x.items()}
+    y_sol = dict()
+    for k in np.arange(K):
+        y_sol[k] = {i: var.X for i, var in y[k].items()}
+    theta_sol = scen_model.getVarByName("theta").X
+
+    # delete constraints
+    for node_sec in np.arange(1, len(new_node)):
+        xi_found = new_node[:node_sec]
+        k_new = new_node[node_sec]
+        scen_model.remove(scen_model.getConstrByName(f"const1_{xi_found}_{k_new}"))
+        scen_model.remove(scen_model.getConstrByName(f"const2_{xi_found}_{k_new}"))
+    scen_model.update()
+
+    return theta_sol, x_sol, y_sol
 
 
 # STATIC SOLUTION ROBUST COUNTERPART
@@ -163,7 +203,7 @@ def static_solution_rc(graph):
     src.addConstr(gp.quicksum(x[a] for a in graph.arcs_out[0]) >= 1)
     # switch point without extra variable
     src.addConstr(gp.quicksum(gp.quicksum(x[a] for a in graph.arcs_in[j]) - gp.quicksum(x[a] for a in graph.arcs_out[j]) for j in np.arange(1, graph.N-1)) == 1)
-    # outside range
+    # outside range     ONLY HERE
     src.addConstrs(x[a] == 0 for j in graph.outside_range for a in graph.arcs_out[j])
 
     # second stage
@@ -196,12 +236,12 @@ def static_solution_rc(graph):
             gp.quicksum((y[a] + x[a]) * graph.distances_array[a] + d_1_a[a] for a in np.arange(graph.num_arcs))
             + d_1_b * graph.gamma <= theta)
         src.addConstrs(graph.distances_array[a] / 2 * y[a] - d_1_a[a] - d_1_b
-                      <= 0 for a in np.arange(graph.num_arcs))
+                       <= 0 for a in np.arange(graph.num_arcs))
         # first stage constraint
         src.addConstr(gp.quicksum((x[a]) * graph.distances_array[a] - d_2_a[a] for a in np.arange(graph.num_arcs))
                       - d_2_b * graph.gamma >= graph.max_first_stage)
         src.addConstrs(graph.distances_array[a] / 2 * y[a] + d_2_a[a] + d_2_b
-                      >= 0 for a in np.arange(graph.num_arcs))
+                       >= 0 for a in np.arange(graph.num_arcs))
 
     # solve model
     src.Params.OutputFlag = 0
@@ -209,6 +249,7 @@ def static_solution_rc(graph):
     x_sol = {i: var.X for i, var in x.items()}
     y_sol = {i: var.X for i, var in y.items()}
     theta_sol = src.getVarByName("theta").X
+
     return x_sol
 
 
@@ -222,15 +263,6 @@ def scenario_fun_static_build(graph, x):
 
     # objective function
     sms.setObjective(theta, GRB.MINIMIZE)
-
-    # deterministic constraints
-
-    # first stage
-    sms.addConstr(gp.quicksum(x[a] for a in graph.arcs_out[0]) >= 1)
-    # switch point without extra variable
-    sms.addConstr(gp.quicksum(gp.quicksum(x[a] for a in graph.arcs_in[j]) - gp.quicksum(x[a] for a in graph.arcs_out[j]) for j in np.arange(1, graph.N-1)) == 1)
-    # outside range
-    sms.addConstrs(x[a] == 0 for j in graph.outside_range for a in graph.arcs_out[j])
 
     # second stage
     # only one outgoing for each node
@@ -269,18 +301,22 @@ def scenario_fun_static_update(graph, scen, x, sms):
 
     # objective constraint
     sms.addConstr(gp.quicksum((1 + scen[a] / 2) * graph.distances_array[a] * (y[a] + x[a])
-                                     for a in np.arange(graph.num_arcs)) <= theta)
+                                     for a in np.arange(graph.num_arcs)) <= theta, name="new_const")
     sms.update()
     # solve model
     sms.optimize()
     y_sol = {i: var.X for i, var in y.items()}
     theta_sol = sms.getVarByName("theta").X
 
+    # delete new constraint
+    sms.remove(sms.getConstrByName("new_const"))
+    sms.update()
+
     return theta_sol, y_sol
 
 
 # SCENARIO FUN NOMINAL ATTRIBUTES
-def scenario_fun_nominal_build(graph):
+def scenario_fun_deterministic_build(graph):
     smn = gp.Model("Scenario-Based K-Adaptability Problem")
     N = graph.N
     # variables
@@ -297,8 +333,6 @@ def scenario_fun_nominal_build(graph):
     smn.addConstr(gp.quicksum(x[a] for a in graph.arcs_out[0]) >= 1)
     # switch point without extra variable
     smn.addConstr(gp.quicksum(gp.quicksum(x[a] for a in graph.arcs_in[j]) - gp.quicksum(x[a] for a in graph.arcs_out[j]) for j in np.arange(1, graph.N-1)) == 1)
-    # outside range
-    smn.addConstrs(x[a] == 0 for j in graph.outside_range for a in graph.arcs_out[j])
 
     # second stage
     # only one outgoing for each node
@@ -332,7 +366,7 @@ def scenario_fun_nominal_build(graph):
     return smn
 
 
-def scenario_fun_nominal_update(graph, scen, smn):
+def scenario_fun_deterministic_update(graph, scen, smn):
     x = {a: smn.getVarByName(f"x[{a}]") for a in np.arange(graph.num_arcs)}
     y = {a: smn.getVarByName(f"y[{a}]") for a in np.arange(graph.num_arcs)}
     theta = smn.getVarByName("theta")
@@ -340,15 +374,19 @@ def scenario_fun_nominal_update(graph, scen, smn):
     # first stage constraint
     smn.addConstr(
         gp.quicksum((1 + scen[a] / 2) * graph.distances_array[a] * x[a] for a in np.arange(graph.num_arcs))
-        >= graph.max_first_stage)
+        >= graph.max_first_stage, name="new_const")
     # objective constraint
     smn.addConstr(gp.quicksum((1 + scen[a] / 2) * graph.distances_array[a] * (y[a] + x[a])
-                                     for a in np.arange(graph.num_arcs)) <= theta)
+                              for a in np.arange(graph.num_arcs)) <= theta)
     smn.update()
     # solve model
     smn.optimize()
     x_sol = {i: var.X for i, var in x.items()}
     y_sol = {i: var.X for i, var in y.items()}
     theta_sol = smn.getVarByName("theta").X
+
+    # delete new constraint
+    smn.remove(smn.getConstrByName("new_const"))
+    smn.update()
 
     return theta_sol, x_sol, y_sol

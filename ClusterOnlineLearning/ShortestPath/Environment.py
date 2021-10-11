@@ -33,7 +33,9 @@ class Graph:
         self.max_first_stage = dist_to_N*first_stage_ratio
         self.gamma = num_arcs_used * gamma_perc
         self.act_gamma_perc = self.gamma/self.num_arcs
-
+        self.gamma_perc = gamma_perc
+        self.first_stage_ratio = first_stage_ratio
+        
     def plot_graph(self):
         arcs = self.arcs
         sns.set()

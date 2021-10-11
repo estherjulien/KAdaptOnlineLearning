@@ -17,8 +17,8 @@ class ProjectsInstance:
         self.lam = 0.12
         self.mu = 1.2
         self.xi_dim = xi_dim
-        self.x_dim = self.N
-        self.y_dim = self.N
+        self.x_dim = self.N + 1
+        self.y_dim = self.N + 1
         self.inst_num = inst_num
         self.init_uncertainty = np.zeros(self.xi_dim)
 
@@ -28,6 +28,7 @@ class ProjectsInstance:
         else:
             cost_nom_vector = init_cost_vector
         self.budget = sum(cost_nom_vector) / 2
+        self.max_loan = sum(cost_nom_vector)*1.5 - self.budget
 
         if init_phi_vector is not None and init_psi_vector is not None:
             phi_vector = init_phi_vector

@@ -29,13 +29,24 @@ class Graph:
         self.init_uncertainty = np.zeros(self.num_arcs)
 
         # list of nodes inside first stage range
-        dist_to_N, num_arcs_used, self.max_first_stage, self.inside_range, self.outside_range = self.shortest_path(self, first_stage_ratio)
-        self.max_first_stage = dist_to_N*first_stage_ratio
-        self.gamma = num_arcs_used * gamma_perc
+        self.dist_to_N, self.num_arcs_used, self.max_first_stage, self.inside_range, self.outside_range = self.shortest_path(self, first_stage_ratio)
+        self.max_first_stage = self.dist_to_N*first_stage_ratio
+        self.gamma = self.num_arcs_used * gamma_perc
         self.act_gamma_perc = self.gamma/self.num_arcs
-        print(f"Instance {self.inst_num}: actual gamma perc = {self.act_gamma_perc}")
-        # plot graph
+        print(f"Instance {self.inst_num}: actual gamma = {self.gamma}")
+        self.gamma_perc = gamma_perc
+        self.first_stage_ratio = first_stage_ratio
         self.plot_graph()
+
+    def set_gamma_perc(self, gamma_perc):
+        self.gamma_perc = gamma_perc
+        self.gamma = self.num_arcs_used * gamma_perc
+        self.act_gamma_perc = self.gamma/self.num_arcs
+        print(f"Instance {self.inst_num}: actual gamma = {self.gamma}")
+
+    def set_first_stage_ratio(self, first_stage_ratio):
+        self.first_stage_ratio = first_stage_ratio
+        self.max_first_stage = self.dist_to_N*first_stage_ratio
 
     def plot_graph(self):
         arcs = self.arcs

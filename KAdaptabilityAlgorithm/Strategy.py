@@ -1,6 +1,6 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.ProblemMILPs.functions import *
-from ShortestPath.Attributes.att_functions import *
+from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
+from CapitalBudgetingLoans.Attributes.att_functions import *
 
 from tensorflow.keras.models import load_model
 from datetime import datetime
@@ -11,7 +11,7 @@ import copy
 import time
 
 
-def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, print_info=True, problem_type="test",
+def algorithm(K, env, att_series, equal_weights=False, weight_model_name=None, time_limit=20*60, print_info=True, problem_type="test",
               depth=1, width=50):
     # Initialize
     iteration = 0
@@ -29,10 +29,23 @@ def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, prin
     mp_time = 0
     sp_time = 0
     new_model = True
-    # initialize N_set
-    theta_i, x_i, y_i, tau_i, N_set, scen_all, att_all, tot_nodes_new, init_tot_scens, zeta_init = init_pass(K, env, att_series)
+    # FOR STATIC ATTRIBUTE
+    try:
+        x_static = static_solution_rc(env)
+        stat_model = scenario_fun_static_build(env, x_static)
+    except:
+        x_static = None
+        stat_model = None
 
-    # scale values by normalizing
+    det_model = scenario_fun_deterministic_build(env)
+    
+    # initialize N_set
+    theta_i, x_i, y_i, tau_i, N_set, scen_all, att_all, tot_nodes_new, init_tot_scens, zeta_init = init_pass(K, env,
+                                                                                                             att_series,
+                                                                                                             x_static,
+                                                                                                             stat_model,
+                                                                                                             det_model)
+
     # save stuff
     tot_nodes = copy.copy(tot_nodes_new)
     runtime = time.time() - start_time
@@ -43,17 +56,21 @@ def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, prin
     inc_y[runtime] = y_i
     inc_tot_nodes[runtime] = tot_nodes
 
-    _, att_index = init_weights_fun(K, env, att_series)
+    init_weights, att_index = init_weights_fun(K, env, att_series)
 
-    if weight_model_name is None:
-        if env.inst_num == 0:
-            model_inst = np.random.randint(16)
-        else:
-            model_inst = 0
-        weight_model_name = f"Results/Models/SubTree/nn_model_sp_online_learning_sub_tree_K4_N100_g30_fs30_D1_W50_inst{model_inst}.h5"
-    weight_model = load_model(weight_model_name)
+    if equal_weights:
+        weight_model = None
+    elif weight_model_name is None:
+        weight_model_name = f"nn_model_cb_online_learning_sub_tree_K4_N10_D1_W50_inst0.h5"
+        weight_model = load_model(weight_model_name)
+        _, att_index = init_weights_fun(K, env, att_series)
+        init_weights = None
+    else:
+        weight_model = load_model(weight_model_name)
+        _, att_index = init_weights_fun(K, env, att_series)
+        init_weights = None
 
-    new_xi_num = len(scen_all)-1
+    new_xi_num = len(scen_all) - 1
 
     # K-branch and bound algorithm
     now = datetime.now().time()
@@ -61,6 +78,7 @@ def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, prin
     while N_set and time.time() - start_time < time_limit:
         # MASTER PROBLEM
         if new_model:
+            tot_nodes += 1
             try:
                 del model
             except:
@@ -73,6 +91,8 @@ def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, prin
             start_mp = time.time()
             theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
+
+            # initialize static and deterministic model
         else:
             # new node from k_new
             tot_nodes += 1
@@ -118,7 +138,8 @@ def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, prin
             new_model = False
             new_xi_num += 1
             scen_all = np.vstack([scen_all, xi])
-            scen_att = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y)
+            scen_att = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
+                                          stat_model=stat_model, det_model=det_model)
             att_all = np.vstack([att_all, scen_att])
 
         full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
@@ -131,7 +152,7 @@ def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, prin
             tot_scens = np.sum([len(t) for t in placement.values()])
             tau_att = {k: att_all[placement[k]] for k in np.arange(K)}
             tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, init_tot_scens, tau_att, theta_i, zeta_init, att_index)
-            K_set = predict_subset(K, tau_att, scen_att, weight_model, att_index, tau_s, env.inst_num)
+            K_set = predict_subset(K, tau_att, scen_att, weight_model, init_weights, att_index, tau_s)
             k_new = K_set[0]
         else:
             K_prime = min(K, full_list[-1] + 2)
@@ -186,7 +207,7 @@ def algorithm(K, env, att_series, weight_model_name=None, time_limit=20*60, prin
     return results
 
 
-def init_pass(K, env, att_series):
+def init_pass(K, env, att_series, x_static=None, stat_model=None, det_model=None):
     # Initialize
     start_time = time.time()
     tot_nodes = 0
@@ -195,7 +216,7 @@ def init_pass(K, env, att_series):
     new_model = True
     
     # initialize N_set with actual scenario
-    xi_init, att_init, zeta_init = init_scen(K, env, att_series)
+    xi_init, att_init, zeta_init = init_scen(K, env, att_series, x_static=x_static, stat_model=stat_model, det_model=det_model)
     N_set = [{k: [] for k in np.arange(K)}]
     N_set[0][0].append(0)
     scen_all = xi_init.reshape([1, -1])
@@ -232,7 +253,8 @@ def init_pass(K, env, att_series):
             new_model = False
             new_xi_num += 1
             scen_all = np.vstack([scen_all, xi])
-            scen_att = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y)
+            scen_att = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
+                                          stat_model=stat_model, det_model=det_model)
             att_all = np.vstack([att_all, scen_att])
 
         full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
@@ -260,7 +282,7 @@ def init_pass(K, env, att_series):
     return theta, x, y, tau, N_set, scen_all, att_all, tot_nodes, tot_scens, zeta_init
 
 
-def init_scen(K, env, att_series):
+def init_scen(K, env, att_series, x_static=None, stat_model=None, det_model=None):
     tau = {k: [] for k in np.arange(K)}
     tau[0].append(env.init_uncertainty)
 
@@ -271,6 +293,7 @@ def init_scen(K, env, att_series):
     zeta_init, xi_init = separation_fun(K, x, y, theta, env, tau)
 
     # new tau to be saved in N_set
-    att_init = attribute_per_scen(K, xi_init, env, att_series, tau, theta, x, y)
+    att_init = attribute_per_scen(K, xi_init, env, att_series, tau, theta, x, y, x_static=x_static, 
+                                  stat_model=stat_model, det_model=det_model)
 
     return xi_init, att_init, zeta_init

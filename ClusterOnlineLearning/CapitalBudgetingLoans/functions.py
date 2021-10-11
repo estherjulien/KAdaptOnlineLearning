@@ -62,7 +62,7 @@ def scenario_fun_build(K, tau, env):
                                                for p in np.arange(N)) - env.lam*(x_0 + env.mu*y_0[k])) <= theta)
             # budget constraint
             scen_model.addConstr(gp.quicksum(cost_fun(projects[p], xi) * (x[p]) for p in np.arange(N))
-                                 <= env.budget + 0)
+                                 <= env.budget + x_0)
             scen_model.addConstr(gp.quicksum(cost_fun(projects[p], xi) * (x[p] + y[k][p]) for p in np.arange(N))
                                  <= (env.budget + x_0 + y_0[k]))
 
