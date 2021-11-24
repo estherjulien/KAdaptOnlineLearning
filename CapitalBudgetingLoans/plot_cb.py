@@ -5,7 +5,7 @@ import numpy as np
 import pickle
 
 
-def plot_stuff(K, N, num_inst, num_model=0):
+def plot_stuff(K, N, num_inst, rf_num=0):
     env_rand = dict()
     env_strat = dict()
     results_random = dict()
@@ -14,7 +14,7 @@ def plot_stuff(K, N, num_inst, num_model=0):
         with open(f"Results/Decisions/Random/final_results_cb_random_K{K}_N{N}_inst{i}.pickle", "rb") as handle:
             env_rand[i], results_random[i] = pickle.load(handle)
         theta_rand = results_random[i]["theta"]
-        with open(f"Results/Decisions/StrategySucPred/final_results_cb_suc_pred_strategy_K{K}_N{N}_online_strategy_inst{i}.pickle", "rb") as handle:
+        with open(f"ResultsSucPred/Decisions/final_results_cb_suc_pred_strategy_K{K}_N{N}_rf{rf_num}_inst{i}.pickle", "rb") as handle:
             env_strat[i], results_strategy[i] = pickle.load(handle)
         theta_strat = results_strategy[i]["theta"]
         print(f"Instance {i}: R {theta_rand}    S {theta_strat}")
@@ -62,7 +62,7 @@ def plot_stuff(K, N, num_inst, num_model=0):
     plt.ylabel("Relative Objective")
     plt.ylim([0.8, 1.1])
     plt.legend()
-    plt.savefig(f"plot_runtime_suc_pred_cb_K{K}_N{N}_nm{num_model}_{num_inst}")
+    plt.savefig(f"plot_runtime_suc_pred_cb_K{K}_N{N}_rf{rf_num}_{num_inst}")
     plt.close()
 
     # PLOT RESULTS OVER NODES
@@ -108,17 +108,17 @@ def plot_stuff(K, N, num_inst, num_model=0):
     plt.ylabel("Relative Objective")
     plt.ylim([0.8, 1.1])
     plt.legend()
-    plt.savefig(f"plot_nodes_suc_pred_cb_K{K}_N{N}_nm{num_model}_{num_inst}")
+    plt.savefig(f"plot_nodes_suc_pred_cb_K{K}_N{N}_rf{rf_num}_{num_inst}")
     plt.close()
 
     return env_rand, env_strat
 
 
 num_inst = 16
-
-for K in [2, 3, 4]:
+rf_num = 10
+for K in [3]:
     for N in [10]:
         try:
-            env_rand, env_strat = plot_stuff(K, N, num_inst)
+            env_rand, env_strat = plot_stuff(K, N, num_inst, rf_num)
         except FileNotFoundError:
             pass

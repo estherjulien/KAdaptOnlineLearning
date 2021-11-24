@@ -1,8 +1,7 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.ProblemMILPs.functions import *
+from functions import *
 
 from datetime import datetime
-import pandas as pd
 import numpy as np
 import pickle
 import copy
@@ -44,9 +43,12 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
         # MASTER PROBLEM
         if new_model:
             tot_nodes += 1
+            try:
+                del model
+            except:
+                pass
             # take new node
-            new_pass = np.random.randint(len(N_set))
-            placement = N_set.pop(new_pass)
+            placement = N_set.pop(0)
             tau = {k: scen_all[placement[k]] for k in np.arange(K)}
             # master problem
             start_mp = time.time()
@@ -133,8 +135,8 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                            "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all}
-            with open("Results/Decisions/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
-                pickle.dump([env, tmp_results], handle)
+            with open("ClusterDataGenShortestPath/Results/Decisions/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+                pickle.dump(tmp_results, handle)
         iteration += 1
     # termination results
     runtime = time.time() - start_time
@@ -152,13 +154,8 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
                "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all}
 
-    with open(f"Results/Decisions/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
-        pickle.dump([env, results], handle)
-
-    try:
-        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
-    except:
-        pass
+    with open(f"ClusterDataGenShortestPath/Results/Decisions/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+        pickle.dump(results, handle)
     return results
 
 

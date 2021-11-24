@@ -1,17 +1,19 @@
 # CHANGE THIS FOR NEW PROBLEMS
+from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
+from CapitalBudgetingLoans.Attributes.att_functions import *
 
-from SuccessPrediction.OnlineLearning import *
+from tensorflow.keras.models import load_model
 from joblib import Parallel, delayed
 from datetime import datetime
+import pandas as pd
 import numpy as np
 import pickle
 import copy
 import time
 
 
-# TODO: CHECK REQUIREMENTS FOR MAX
-def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 * 60, problem_type="test",
-                  thread_count=8, depth=1, width=50, max_depth=5):
+def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 * 60, problem_type="test",
+              thread_count=8, depth=1, width=50, max_depth=5):
     # Initialize
     iteration = 0
     start_time = time.time()
@@ -27,12 +29,12 @@ def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=
     explore_results = dict()
     pass_score = []
     strategy_results = dict()
-    success_data = []
-    input_data = []
+    weight_data = []
+    state_data = []
     # K-branch and bound algorithm
     now = datetime.now().time()
 
-    success_model_name = f"nn_model_alt_{problem_type}_D{depth}_W{width}_inst{env.inst_num}.h5"
+    weight_model_name = f"nn_model_{problem_type}_D{depth}_W{width}_inst{env.inst_num}.h5"
 
     # FOR STATIC ATTRIBUTE
     try:
@@ -77,6 +79,11 @@ def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=
         N_set_new = dict()
         N_att_set_new = dict()
 
+        # iterative
+        # for i in np.arange(pass_num):
+        #     results[i], N_set_new[i], N_att_set_new[i] = \
+        #         parallel_pass(K, env, att_series, N_set[i], N_att_set[i], theta_i, init_zeta, init_tot_scens, start_time, att_index,
+        #                       explore_bool=explore_bool[i], weight_model_name=weight_model_name, sub_tree=sub_tree)
         # parallel
         time_before_run = time.time() - start_time
         tot_results = Parallel(n_jobs=thread_count)(delayed(parallel_pass)(K, env, att_series,
@@ -84,7 +91,7 @@ def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=
                                                                            theta_i, init_zeta,
                                                                            init_tot_scens, att_index,
                                                                            explore_bool=explore_bool[i],
-                                                                           success_model_name=success_model_name,
+                                                                           weight_model_name=weight_model_name,
                                                                            sub_tree=sub_tree,
                                                                            x_static=x_static)
                                                     for i in np.arange(pass_num))
@@ -157,21 +164,27 @@ def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=
         else:
             strat_rand_ratio = 1
 
-        old_data_len = len(input_data)
         # SELECT EXPERTS
         if sub_tree:
             new_experts_list = []
             for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
-                if pass_score[i] > 0.98 and len(explore_results[i]["input_data"]) > 1:
+                if pass_score[i] > 0.98 and len(explore_results[i]["state_data"]) > 1:
                     # change state and weight data for exploring "expert" results of sub-tree
                     new_experts_list.append(i)
 
             time_before_run = time.time() - start_time
+            # tmp_expert_results = []
+            # for i in new_experts_list:
+            #     tmp_expert_results.append(sub_tree_pass(K, env, att_series, explore_results[i]["sub_tree"],
+            #                                             explore_results[i]["state_data"],
+            #                                             explore_results[i]["weight_data"],
+            #                                             n_back_track, explore_results[i]["theta"], init_zeta,
+            #                                             init_tot_scens, att_index, i))
 
             tmp_expert_results = Parallel(n_jobs=thread_count)(delayed(sub_tree_pass)(K, env, att_series,
                                                                                       explore_results[i]["sub_tree"],
-                                                                                      explore_results[i]["input_data"],
-                                                                                      explore_results[i]["success_data"],
+                                                                                      explore_results[i]["state_data"],
+                                                                                      explore_results[i]["weight_data"],
                                                                                       n_back_track,
                                                                                       theta_i_old,
                                                                                       init_zeta, init_tot_scens,
@@ -217,37 +230,35 @@ def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=
 
             for results in expert_results:
                 try:
-                    input_data = np.vstack([input_data, results["input_data"]])
+                    state_data = np.vstack([state_data, results["state_data"]])
                 except ValueError:
-                    input_data = results["input_data"]
+                    state_data = results["state_data"]
                 try:
-                    success_data = np.hstack([success_data, results["success_data"]])
+                    weight_data = np.vstack([weight_data, results["weight_data"]])
                 except ValueError:
-                    success_data = results["success_data"]
+                    weight_data = results["weight_data"]
 
         else:
-            new_experts = 0
             for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
-                if pass_score[i] > 0.999 and len(explore_results[i]["input_data"]) > 1:
+                if pass_score[i] > 0.999 and len(explore_results[i]["state_data"]) > 1:
                     # if score diverges 10 percent from best one, add it
                     # add state and weight data
                     try:
-                        input_data = np.vstack([input_data, explore_results[i]["input_data"]])
+                        state_data = np.vstack([state_data, explore_results[i]["state_data"]])
                     except ValueError:
-                        input_data = explore_results[i]["input_data"]
+                        state_data = explore_results[i]["state_data"]
                     try:
-                        success_data = np.hstack([success_data, explore_results[i]["success_data"]])
+                        weight_data = np.vstack([weight_data, explore_results[i]["weight_data"]])
                     except ValueError:
-                        success_data = explore_results[i]["success_data"]
+                        weight_data = explore_results[i]["weight_data"]
                     new_experts += 1
 
-        # update success model
-        if new_experts > 0 and len(input_data[-new_experts:]):
-            new_expert_data = len(input_data) - old_data_len
-            print(f"Instance OL {env.inst_num}: update weights with {new_experts} new experts, {new_expert_data} new data points. "
-                  f"ratio = {strat_rand_ratio}, tot_data_points = {len(input_data)}")
-            update_model_fun(input_data, success_data, expert_data_num=new_expert_data, depth=depth, width=width,
-                             success_model_name=success_model_name)
+        # update weights
+        if new_experts > 0 and len(state_data[-new_experts:]):
+            print(f"Instance OL {env.inst_num}: update weights with {new_experts} new experts. "
+                  f"ratio = {strat_rand_ratio}, tot_data_points = {len(state_data)}")
+            update_weights_fun(state_data[-new_experts:], weight_data[-new_experts:], depth=depth, width=width,
+                               weight_model_name=weight_model_name)
 
         # save every 10 minutes
         if time.time() - start_time - prev_save_time > 10 * 60:
@@ -257,7 +268,7 @@ def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=
             tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "inc_thetas_t": inc_thetas_t,
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
-                           "input_data": input_data, "success_data": success_data}
+                           "state_data": state_data, "weight_data": weight_data}
             with open("Results/Decisions/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num),
                       "wb") as handle:
                 pickle.dump([env, tmp_results], handle)
@@ -276,7 +287,7 @@ def algorithm_max(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=
     results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "inc_thetas_t": inc_thetas_t,
                "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
-               "input_data": input_data, "success_data": success_data}
+               "state_data": state_data, "weight_data": weight_data}
 
     with open("Results/Decisions/final_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
         pickle.dump([env, results], handle)

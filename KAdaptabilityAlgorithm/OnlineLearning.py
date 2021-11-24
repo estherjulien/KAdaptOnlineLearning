@@ -1,13 +1,10 @@
 # CHANGE THIS FOR NEW PROBLEMS
-# from ShortestPath.ProblemMILPs.functions_2s import *
-# from ShortestPath.Attributes.att_functions_2s import *
-from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
-from CapitalBudgetingLoans.Attributes.att_functions import *
+from ShortestPath.ProblemMILPs.functions import *
+from ShortestPath.Attributes.att_functions import *
 
 from tensorflow.keras.models import load_model
 from joblib import Parallel, delayed
 from datetime import datetime
-import pandas as pd
 import numpy as np
 import pickle
 import copy
@@ -35,7 +32,7 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20*6
     # K-branch and bound algorithm
     now = datetime.now().time()
 
-    weight_model_name = f"nn_model_{problem_type}_D{depth}_W{width}_inst{env.inst_num}.h5"
+    weight_model_name = f"Results/RFModels/rf_model_{problem_type}.joblib"
 
     # FOR STATIC ATTRIBUTE
     try:
@@ -44,7 +41,10 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20*6
         x_static = None
 
     # initialize N_set
-    theta_i, x_i, y_i, N_set, tau_i, N_att_set, tot_nodes_new, init_tot_scens, init_zeta = init_pass(K, env, att_series, x_static)
+    theta_init, x_i, y_i, N_set, tau_i, N_att_set, tot_nodes_new, init_tot_scens, zeta_init = init_pass(K, env,
+                                                                                                        att_series,
+                                                                                                        x_static)
+    theta_i = copy.copy(theta_init)
     # save stuff
     tot_nodes = copy.copy(tot_nodes_new)
     runtime = time.time() - start_time

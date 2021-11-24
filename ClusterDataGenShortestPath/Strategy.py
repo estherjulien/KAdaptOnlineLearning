@@ -1,17 +1,15 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.ProblemMILPs.functions import *
-from ShortestPath.Attributes.att_functions_alt import *
+from functions import *
+from att_functions_alt import *
 
-from tensorflow.keras.models import load_model
 from datetime import datetime
-import pandas as pd
 import numpy as np
 import pickle
 import copy
 import time
 
 
-def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, print_info=True,
+def algorithm(K, env, att_series, success_model_name, time_limit=20 * 60, print_info=True,
               problem_type="test"):
     # Initialize
     iteration = 0
@@ -30,12 +28,12 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
     sp_time = 0
     new_model = True
     # FOR STATIC ATTRIBUTE
-    try:
-        x_static = static_solution_rc(env)
-        stat_model = scenario_fun_static_build(env, x_static)
-    except:
-        x_static = None
-        stat_model = None
+    # try:
+    #     x_static = static_solution_rc(env)
+    #     stat_model = scenario_fun_static_build(env, x_static)
+    # except:
+    x_static = None
+    stat_model = None
 
     det_model = scenario_fun_deterministic_build(env)
 
@@ -55,9 +53,6 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
     inc_y[runtime] = y_i
     inc_tot_nodes[runtime] = tot_nodes
 
-    if success_model_name is None:
-        success_model_name = f"ResultsSucPred/NNModels/nn_model_alt_cb_online_learning_sub_tree_K2_N10_D1_W50_inst0.h5"
-
     # success_model = load_model(success_model_name)
     success_model = joblib.load(success_model_name)
     _, att_index = init_weights_fun(K, env, att_series)
@@ -72,18 +67,14 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
         if new_model:
             tot_nodes += 1
             # take new node
-            new_pass = np.random.randint(len(N_set))
-            placement = N_set.pop(new_pass)
+            placement = N_set.pop(0)
             tau = {k: scen_all[placement[k]] for k in np.arange(K)}
 
             # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
-            theta_pre, zeta_pre = [1, 1]
         else:
-            theta_pre = copy.copy(theta)
-            zeta_pre = copy.copy(zeta)
             # new node from k_new
             tot_nodes += 1
             # master problem
@@ -143,7 +134,7 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
             k_att_sel = {k: np.array([att_all_k[p][k] for p in placement[k]]) for k in np.arange(K)}
             tau_att = {k: np.hstack([att_all[placement[k]], k_att_sel[k]]) for k in np.arange(K)}
             tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, init_tot_scens, tau_att, theta_init, zeta_init,
-                                   att_index, theta_pre, zeta_pre)
+                                   att_index)
             K_set = predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, tau_s)
             k_new = K_set[0]
         else:
@@ -168,8 +159,8 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                            "mp_time": mp_time, "sp_time": sp_time}
-            with open(f"ResultsSucPred/Decisions/tmp_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
-                pickle.dump([env, tmp_results], handle)
+            with open(f"ClusterDataGenShortestPath/Results/Decisions/tmp_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+                pickle.dump(tmp_results, handle)
         iteration += 1
 
     # termination results
@@ -189,13 +180,9 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
                "runtime": runtime, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all, "att_all": att_all}
 
-    with open(f"ResultsSucPred/Decisions/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
-        pickle.dump([env, results], handle)
+    with open(f"ClusterDataGenShortestPath/Results/Decisions/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+        pickle.dump(results, handle)
 
-    try:
-        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
-    except AttributeError:
-        pass
     return results
 
 
@@ -289,5 +276,5 @@ def init_scen(K, env, att_series, x_static=None, stat_model=None, det_model=None
 
     # new tau to be saved in N_set
     att_init, att_init_k = attribute_per_scen(K, xi_init, env, att_series, tau, theta, x, y, x_static=x_static,
-                                              stat_model=stat_model, det_model=det_model)
+                                  stat_model=stat_model, det_model=det_model)
     return xi_init, np.array(att_init), att_init_k, zeta_init

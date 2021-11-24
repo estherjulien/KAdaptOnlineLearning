@@ -1,6 +1,10 @@
 from CapitalBudgetingLoans.Environment.Env import *
 from CapitalBudgetingLoans.Attributes.att_functions import *
 from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
+
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import SGD
@@ -8,30 +12,33 @@ from tensorflow.keras.layers import Dense
 
 import tensorflow as tf
 import numpy as np
+import joblib
 import copy
 
 
 def predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, state_features):
     X = input_fun(K, state_features, tau_att, scen_att, scen_att_k, att_index)
 
-    pred_tmp = success_model.predict(X)
+    pred_tmp = success_model.predict_proba(X)
 
-    success_prediction = np.array([i[0] for i in pred_tmp])
+    success_prediction = np.array([i[1] for i in pred_tmp])
     # print(f"Success prediction = {[np.round(s, 3) for s in success_prediction]}")
     order = np.argsort(success_prediction)
     return order[::-1]
 
 
-def state_features(K, env, theta, zeta, x, y, depth, depth_i, df_att, theta_i, zeta_i, att_index):
+def state_features(K, env, theta, zeta, x, y, depth, depth_i, df_att, theta_i, zeta_i, att_index, theta_pre, zeta_pre):
     features = []
     # objective
     features.append(theta/theta_i)
+    # objective compared to previous
+    features.append(theta/theta_pre)
     # violation
     features.append(zeta/zeta_i)
+    # violation compared to before
+    features.append(zeta/zeta_pre)
     # depth
     features.append(depth/depth_i)
-
-    # get state features for subsets >> makes it dependent on K
 
     return np.array(features)
 
@@ -66,7 +73,7 @@ def input_fun(K, state_features, tau_att, scen_att_pre, scen_att_k, att_index):
     return X
 
 
-def update_model_fun(X, Y, expert_data_num=0, depth=1, width=10, success_model_name="test"):
+def update_model_fun_nn(X, Y, expert_data_num=0, depth=1, width=10, success_model_name="test"):
     # maybe try different architectures? only report the best one
     n_features = np.shape(X)[1]
     n_labels = 1
@@ -108,3 +115,19 @@ def update_model_fun(X, Y, expert_data_num=0, depth=1, width=10, success_model_n
         success_model.fit(X, Y, epochs=500, batch_size=32, verbose=1, callbacks=[es])
         # save weight model
         success_model.save(success_model_name)
+
+
+def update_model_fun(X, Y, expert_data_num=0, depth=1, width=10, success_model_name="test"):
+    X_train, X_val, Y_train, Y_val = train_test_split(X[:, :-1], Y, test_size=0.1)
+
+    rf = RandomForestClassifier()
+    rf.fit(X_train, Y_train)
+
+    # evaluation
+    score_rf = rf.score(X_val, Y_val)
+
+    print(f"RF validation accuracy = {score_rf} \n")
+    # save
+    joblib.dump(rf, success_model_name)
+
+    return score_rf

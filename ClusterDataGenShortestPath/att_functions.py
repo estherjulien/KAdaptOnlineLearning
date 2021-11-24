@@ -1,12 +1,7 @@
-from ShortestPath.ProblemMILPs.functions import *
+from functions import *
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.optimizers import SGD
-from tensorflow.keras.models import load_model
 
 import numpy as np
 import joblib
@@ -264,38 +259,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
 
     weights = np.array(weight_val)
     return weights, att_index
-
-
-def update_weights_fun_nn(state_features, weight_data, depth=1, width=10, weight_model_name="test"):
-    # maybe try different architectures? only report the best one
-    n_features = np.shape(state_features)[1]
-    n_labels = np.shape(weight_data)[1]
-
-    try:
-        weight_model = load_model(weight_model_name)
-        # increase learning rate as model continues?
-        opt = SGD(learning_rate=0.001, momentum=0.9)
-        # compile the model
-        weight_model.compile(optimizer=opt, loss='categorical_crossentropy')
-        # fit the model on new data
-        weight_model.fit(state_features, weight_data, epochs=5, batch_size=32, verbose=0)
-    except:
-        weight_model = Sequential()
-        # first layer after input layer
-        weight_model.add(Dense(width, activation='relu', input_dim=n_features))
-        for d in np.arange(depth-1):
-            weight_model.add(Dense(width, activation='relu'))
-        # output layer
-        weight_model.add(Dense(n_labels, activation='softmax'))
-        # define the optimization algorithm
-        opt = SGD(learning_rate=0.01, momentum=0.9)
-        # compile the model
-        weight_model.compile(optimizer=opt, loss='categorical_crossentropy')
-        # fit the model on data
-        weight_model.fit(state_features, weight_data, epochs=5, batch_size=32, verbose=0)
-
-    # save weight model
-    weight_model.save(weight_model_name)
 
 
 def update_weights_fun(state_features, weight_data, depth=1, width=10, weight_model_name="test"):
