@@ -11,7 +11,7 @@ def plot_stuff(K, N, num_inst, rf_num=0):
     results_random = dict()
     results_strategy = dict()
     for i in np.arange(num_inst):
-        with open(f"Results/Decisions/Random/final_results_cb_random_K{K}_N{N}_inst{i}.pickle", "rb") as handle:
+        with open(f"Data/Results/Decisions/Random/final_results_cb_random_K{K}_N{N}_inst{i}.pickle", "rb") as handle:
             env_rand[i], results_random[i] = pickle.load(handle)
         theta_rand = results_random[i]["theta"]
         with open(f"ResultsSucPred/Decisions/final_results_cb_suc_pred_strategy_K{K}_N{N}_rf{rf_num}_inst{i}.pickle", "rb") as handle:

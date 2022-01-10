@@ -1,15 +1,11 @@
-from ShortestPath.ProblemMILPs.functions import *
 from ShortestPath.Attributes.att_functions_alt import *
 
-from SuccessPrediction.OnlineLearning import explore_pass, sub_tree_pass, init_pass
+from Method.SuccessPrediction.OnlineLearning import explore_pass, sub_tree_pass, init_pass
 
-from tensorflow.keras.models import load_model
 from joblib import Parallel, delayed
 from datetime import datetime
-import joblib
 import pandas as pd
 import numpy as np
-import itertools
 import pickle
 import copy
 import time
@@ -240,6 +236,7 @@ def data_and_train(K, env_list, att_series, n_back_track=2, time_limit=20 * 60, 
 
     with open(f"ResultsSucPred/Data/all_data_{problem_type}_{num_envs}.pickle", "wb") as handle:
         pickle.dump({"X": X_list, "Y": Y_list}, handle)
+
     # train on
     if train_on is None:
         train_on = [num_envs]

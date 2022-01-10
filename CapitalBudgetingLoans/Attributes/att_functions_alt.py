@@ -1,19 +1,13 @@
-from CapitalBudgetingLoans.Environment.Env import *
-from CapitalBudgetingLoans.Attributes.att_functions import *
-from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
-
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.models import load_model
-from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.layers import Dense
 
 import tensorflow as tf
 import numpy as np
 import joblib
-import copy
 
 
 def predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, state_features):

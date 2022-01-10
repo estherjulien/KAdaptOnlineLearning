@@ -1,4 +1,3 @@
-from CapitalBudgetingLoans.Environment.Env import *
 from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense

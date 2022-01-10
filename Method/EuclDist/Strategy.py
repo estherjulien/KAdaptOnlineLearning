@@ -1,17 +1,15 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.ProblemMILPs.functions import *
-from ShortestPath.Attributes.att_functions_alt import *
+from CapitalBudgetingLoans.Attributes.att_functions import *
 
-from tensorflow.keras.models import load_model
 from datetime import datetime
-import pandas as pd
 import numpy as np
+import joblib
 import pickle
 import copy
 import time
 
 
-def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, print_info=True,
+def algorithm(K, env, att_series, equal_weights=False, weight_model_name=None, time_limit=20 * 60, print_info=True,
               problem_type="test"):
     # Initialize
     iteration = 0
@@ -40,11 +38,12 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
     det_model = scenario_fun_deterministic_build(env)
 
     # initialize N_set
-    theta_init, x_i, y_i, tau_i, N_set, scen_all, att_all, \
-    att_all_k, tot_nodes_new, init_tot_scens, zeta_init = init_pass(K, env, att_series, x_static, stat_model, det_model)
-
+    theta_init, x_i, y_i, tau_i, N_set, scen_all, att_all, tot_nodes_new, init_tot_scens, zeta_init = init_pass(K, env,
+                                                                                                             att_series,
+                                                                                                             x_static,
+                                                                                                             stat_model,
+                                                                                                             det_model)
     theta_i = copy.copy(theta_init)
-
     # save stuff
     tot_nodes = copy.copy(tot_nodes_new)
     runtime = time.time() - start_time
@@ -55,12 +54,15 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
     inc_y[runtime] = y_i
     inc_tot_nodes[runtime] = tot_nodes
 
-    if success_model_name is None:
-        success_model_name = f"ResultsSucPred/NNModels/nn_model_alt_cb_online_learning_sub_tree_K2_N10_D1_W50_inst0.h5"
+    init_weights, att_index = init_weights_fun(K, env, att_series)
 
-    # success_model = load_model(success_model_name)
-    success_model = joblib.load(success_model_name)
-    _, att_index = init_weights_fun(K, env, att_series)
+    if equal_weights:
+        weight_model = None
+    else:
+        # weight_model = load_model(weight_model_name)
+        weight_model = joblib.load(weight_model_name)
+        _, att_index = init_weights_fun(K, env, att_series)
+        init_weights = None
 
     new_xi_num = len(scen_all) - 1
 
@@ -80,10 +82,7 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
             start_mp = time.time()
             theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
-            theta_pre, zeta_pre = [1, 1]
         else:
-            theta_pre = copy.copy(theta)
-            zeta_pre = copy.copy(zeta)
             # new node from k_new
             tot_nodes += 1
             # master problem
@@ -128,10 +127,10 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
             new_model = False
             new_xi_num += 1
             scen_all = np.vstack([scen_all, xi])
-            scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
-                                                      stat_model=stat_model, det_model=det_model)
+            scen_att = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
+                                          stat_model=stat_model, det_model=det_model)
             att_all = np.vstack([att_all, scen_att])
-            att_all_k.append(scen_att_k)
+
         full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
         if len(full_list) == 0:
             K_set = [0]
@@ -139,12 +138,11 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
         elif len(full_list) == K:
             # predict subset
             # STATE FEATURES (based on master and sub problem)
-            tot_scens = np.sum([len(t) for t in tau.values()])
-            k_att_sel = {k: np.array([att_all_k[p][k] for p in placement[k]]) for k in np.arange(K)}
-            tau_att = {k: np.hstack([att_all[placement[k]], k_att_sel[k]]) for k in np.arange(K)}
+            tot_scens = np.sum([len(t) for t in placement.values()])
+            tau_att = {k: att_all[placement[k]] for k in np.arange(K)}
             tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, init_tot_scens, tau_att, theta_init, zeta_init,
-                                   att_index, theta_pre, zeta_pre)
-            K_set = predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, tau_s)
+                                   att_index)
+            K_set = predict_subset(K, tau_att, scen_att, weight_model, init_weights, att_index, tau_s)
             k_new = K_set[0]
         else:
             K_prime = min(K, full_list[-1] + 2)
@@ -168,8 +166,8 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                            "mp_time": mp_time, "sp_time": sp_time}
-            with open(f"ResultsSucPred/Decisions/tmp_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
-                pickle.dump([env, tmp_results], handle)
+            with open(f"Data/ResultsEuclDist/Decisions/inst_results/tmp_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+                pickle.dump(tmp_results, handle)
         iteration += 1
 
     # termination results
@@ -189,8 +187,8 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
                "runtime": runtime, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all, "att_all": att_all}
 
-    with open(f"ResultsSucPred/Decisions/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
-        pickle.dump([env, results], handle)
+    with open(f"Data/ResultsEuclDist/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+        pickle.dump(results, handle)
 
     try:
         env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
@@ -208,13 +206,12 @@ def init_pass(K, env, att_series, x_static=None, stat_model=None, det_model=None
     new_model = True
 
     # initialize N_set with actual scenario
-    xi_init, att_init, att_init_k, zeta_init = init_scen(K, env, att_series, x_static=x_static, stat_model=stat_model,
+    xi_init, att_init, zeta_init = init_scen(K, env, att_series, x_static=x_static, stat_model=stat_model,
                                              det_model=det_model)
     N_set = [{k: [] for k in np.arange(K)}]
     N_set[0][0].append(0)
     scen_all = xi_init.reshape([1, -1])
     att_all = att_init.reshape([1, -1])
-    att_all_k = [att_init_k]
     new_xi_num = 0
     while True:
         # MASTER PROBLEM
@@ -247,10 +244,9 @@ def init_pass(K, env, att_series, x_static=None, stat_model=None, det_model=None
             new_model = False
             new_xi_num += 1
             scen_all = np.vstack([scen_all, xi])
-            scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
+            scen_att = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
                                           stat_model=stat_model, det_model=det_model)
             att_all = np.vstack([att_all, scen_att])
-            att_all_k.append(scen_att_k)
 
         full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
         if len(full_list) == 0:
@@ -274,7 +270,7 @@ def init_pass(K, env, att_series, x_static=None, stat_model=None, det_model=None
 
     tot_scens = np.sum([len(t) for t in placement.values()])
     tau = {k: scen_all[placement[k]] for k in np.arange(K)}
-    return theta, x, y, tau, N_set, scen_all, att_all, att_all_k, tot_nodes, tot_scens, zeta_init
+    return theta, x, y, tau, N_set, scen_all, att_all, tot_nodes, tot_scens, zeta_init
 
 
 def init_scen(K, env, att_series, x_static=None, stat_model=None, det_model=None):
@@ -288,6 +284,7 @@ def init_scen(K, env, att_series, x_static=None, stat_model=None, det_model=None
     zeta_init, xi_init = separation_fun(K, x, y, theta, env, tau)
 
     # new tau to be saved in N_set
-    att_init, att_init_k = attribute_per_scen(K, xi_init, env, att_series, tau, theta, x, y, x_static=x_static,
-                                              stat_model=stat_model, det_model=det_model)
-    return xi_init, np.array(att_init), att_init_k, zeta_init
+    att_init = attribute_per_scen(K, xi_init, env, att_series, tau, theta, x, y, x_static=x_static,
+                                  stat_model=stat_model, det_model=det_model)
+
+    return xi_init, att_init, zeta_init

@@ -1,12 +1,9 @@
-from ShortestPath.ProblemMILPs.functions import *
 from ShortestPath.Attributes.att_functions_alt import *
 
-from EuclDist.OnlineLearning import explore_pass, sub_tree_pass, init_pass
+from Z_OldStuff.Method.EuclDist.OnlineLearning import explore_pass, sub_tree_pass, init_pass
 
-from tensorflow.keras.models import load_model
 from joblib import Parallel, delayed
 from datetime import datetime
-import joblib
 import numpy as np
 import itertools
 import pickle
@@ -224,8 +221,8 @@ def data_and_train(K, env_list, att_series, n_back_track=2, time_limit=20 * 60, 
     for env in env_list:
         results.append(data_gen_fun(K, env, att_series, n_back_track, time_limit, problem_type,
                                 thread_count, max_depth))
-        X_list.append(results[-1]["input_data"])
-        Y_list.append(results[-1]["success_data"])
+        X_list.append(results[-1]["state_data"])
+        Y_list.append(results[-1]["weight_data"])
 
     # train on
     if train_on is None:

@@ -1,21 +1,17 @@
-# CHANGE THIS FOR NEW PROBLEMS
-# from ShortestPath.ProblemMILPs.functions_2s import *
-# from ShortestPath.Attributes.att_functions_2s import *
-from CapitalBudgetingLoans.ProblemMILPs.functions_loans import *
-from CapitalBudgetingLoans.Attributes.att_functions import *
+from ShortestPath.Attributes.att_functions_alt import *
 
-from tensorflow.keras.models import load_model
 from joblib import Parallel, delayed
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import itertools
 import pickle
 import copy
 import time
 
 
-def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 * 60, problem_type="test",
-              thread_count=8, depth=1, width=50, max_depth=5):
+def data_gen_fun(K, env, att_series, n_back_track=2, time_limit=20 * 60, problem_type="test",
+              thread_count=8, max_depth=5):
     # Initialize
     iteration = 0
     start_time = time.time()
@@ -30,13 +26,8 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
     prev_save_time = 0
     explore_results = dict()
     pass_score = []
-    strategy_results = dict()
     weight_data = []
     state_data = []
-    # K-branch and bound algorithm
-    now = datetime.now().time()
-
-    weight_model_name = f"nn_model_{problem_type}_D{depth}_W{width}_inst{env.inst_num}.h5"
 
     # FOR STATIC ATTRIBUTE
     try:
@@ -45,8 +36,9 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
         x_static = None
 
     # initialize N_set
-    theta_i, x_i, y_i, N_set, tau_i, N_att_set, tot_nodes_new, init_tot_scens, init_zeta = init_pass(K, env, att_series,
+    theta_init, x_i, y_i, N_set, tau_i, N_att_set, tot_nodes_new, init_tot_scens, zeta_init = init_pass(K, env, att_series,
                                                                                                      x_static)
+    theta_i = copy.copy(theta_init)
     # save stuff
     tot_nodes = copy.copy(tot_nodes_new)
     runtime = time.time() - start_time
@@ -57,46 +49,29 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
     inc_y[runtime] = y_i
     inc_tot_nodes[runtime] = tot_nodes
 
+    path_num = 0
     _, att_index = init_weights_fun(K, env, att_series)
-    new_experts = 0
-    strat_rand_ratio = 1
-    print("Instance OL {}: started at {}".format(env.inst_num, now))
-    num_strategy = 0
+
+    now = datetime.now().time()
+    print("Instance DG {}: started at {}".format(env.inst_num, now))
+
     while N_set and time.time() - start_time < time_limit:
         # PASSES
         pass_num = min(thread_count, len(N_set))
-        if new_experts > 0:
-            if num_strategy == 0:
-                num_strategy = 1
-            elif strat_rand_ratio > 1:
-                num_strategy = min(int(pass_num / 2), num_strategy + 1)
-            elif strat_rand_ratio > 0.99:
-                pass
-            else:
-                num_strategy = max(0, num_strategy - 1)
-        else:
-            pass
-        explore_bool = [*[True] * (thread_count - num_strategy), *[False] * num_strategy]
+
         results = dict()
         N_set_new = dict()
         N_att_set_new = dict()
 
-        # iterative
-        # for i in np.arange(pass_num):
-        #     results[i], N_set_new[i], N_att_set_new[i] = \
-        #         parallel_pass(K, env, att_series, N_set[i], N_att_set[i], theta_i, init_zeta, init_tot_scens, start_time, att_index,
-        #                       explore_bool=explore_bool[i], weight_model_name=weight_model_name, sub_tree=sub_tree)
+        passes = np.random.randint(len(N_set), pass_num)
         # parallel
         time_before_run = time.time() - start_time
-        tot_results = Parallel(n_jobs=thread_count)(delayed(parallel_pass)(K, env, att_series,
-                                                                           N_set[i], N_att_set[i],
-                                                                           theta_i, init_zeta,
-                                                                           init_tot_scens, att_index,
-                                                                           explore_bool=explore_bool[i],
-                                                                           weight_model_name=weight_model_name,
-                                                                           sub_tree=sub_tree,
-                                                                           x_static=x_static)
-                                                    for i in np.arange(pass_num))
+        tot_results = Parallel(n_jobs=thread_count)(delayed(explore_pass)(K, env, att_series,
+                                                                          N_set[i], N_att_set[i],
+                                                                          theta_i, theta_init, zeta_init,
+                                                                          init_tot_scens, att_index,
+                                                                          x_static=x_static)
+                                                    for i in passes)
         for i in np.arange(pass_num):
             results[i], N_set_new[i], N_att_set_new[i] = tot_results[i]
         del tot_results
@@ -106,13 +81,12 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
             N_set += N_set_new[i]
             N_att_set += N_att_set_new[i]
 
-        N_set = N_set[pass_num:]
-        N_att_set = N_att_set[pass_num:]
+        for i in passes:
+            del N_set[i]
+            del N_att_set[i]
 
-        # SAVE RESULTS
-        num_explore = 0
+        # SCORE PERFORMANCE RANDOM RUNS
         explore_theta = []
-        strategy_theta = []
         theta_i_old = copy.copy(theta_i)
         for i in np.arange(pass_num):
             if results[i]["zeta"] < 1e-4 and results[i]["theta"] - theta_i < -1e-8:
@@ -128,95 +102,56 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
                 inc_x[time_before_run + runtime] = x_i
                 inc_y[time_before_run + runtime] = y_i
                 inc_tot_nodes[time_before_run + runtime] = tot_nodes + tot_nodes_new
-            # for both
+            # Check performance
             tot_nodes += results[i]["tot_nodes"]
-            if results[i]["explore"]:
-                num_explore += 1
-                num_explore_passes = len(explore_results)
-                explore_results[num_explore_passes] = results[i]
-                score = (results[i]["theta"] / theta_i_old) * max([results[i]["zeta"] / init_zeta + 1, 1])
-                # score = results[i]["theta"]/theta_i     # maybe only if robust?
-                pass_score.append(score)
-                explore_theta.append(results[i]["theta"])
-                # print results
-                theta_tmp = np.round(results[i]["theta"], 4)
-                zeta_tmp = np.round(results[i]["zeta"], 4)
-                run_tmp = np.round(results[i]["runtime"], 4)
-                tau_tmp = results[i]["tau"]
-                now = datetime.now().time()
-                print(
-                    f"Instance OL {env.inst_num}: [{num_explore_passes}] it {iteration} explore pass finished ({run_tmp}) (time {now})   "
-                    f":theta = {theta_tmp},    zeta = {zeta_tmp},     pass_score = {np.round(score, 4)}   Xi{[len(t) for t in tau_tmp.values()]}")
-            else:
-                num_strategy_passes = len(strategy_results)
-                strategy_results[num_strategy_passes] = results[i]
-                strategy_theta.append(results[i]["theta"])
-                # print results
-                theta_tmp = np.round(results[i]["theta"], 4)
-                zeta_tmp = np.round(results[i]["zeta"], 4)
-                run_tmp = np.round(results[i]["runtime"], 4)
-                tau_tmp = results[i]["tau"]
-                now = datetime.now().time()
-                print(f"Instance OL {env.inst_num}: it {iteration} strategy pass finished ({run_tmp}) (time {now})   "
-                      f":theta = {theta_tmp},    zeta = {zeta_tmp}   Xi{[len(t) for t in tau_tmp.values()]}")
+            num_explore_passes = len(explore_results)
+            explore_results[num_explore_passes] = results[i]
+            score = (results[i]["theta"] / theta_i_old) * max([results[i]["zeta"] / zeta_init + 1, 1])
+            pass_score.append(score)
+            explore_theta.append(results[i]["theta"])
+            # print results
+            theta_tmp = np.round(results[i]["theta"], 4)
+            zeta_tmp = np.round(results[i]["zeta"], 4)
+            run_tmp = np.round(results[i]["runtime"], 4)
+            tau_tmp = results[i]["tau"]
+            now = datetime.now().time()
+            print(
+                f"Instance DG {env.inst_num}: [{num_explore_passes}] it {iteration} explore pass finished ({run_tmp}) "
+                f"(time {now})      theta = {theta_tmp},    zeta = {zeta_tmp},     pass_score = {np.round(score, 4)}   "
+                f"Xi{[len(t) for t in tau_tmp.values()]}")
             iteration += 1
 
-        if num_strategy > 0:
-            strat_rand_ratio = np.mean(strategy_theta) / np.mean(explore_theta)
-        else:
-            strat_rand_ratio = 1
-
         # SELECT EXPERTS
-        if sub_tree:
-            new_experts_list = []
-            for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
-                if pass_score[i] > 0.98 and len(explore_results[i]["state_data"]) > 1:
-                    # change state and weight data for exploring "expert" results of sub-tree
-                    new_experts_list.append(i)
+        new_experts_list = []
+        for i in np.arange(len(pass_score) - pass_num, len(pass_score)):
+            if pass_score[i] < 1.02 and len(explore_results[i]["input_data"]) > 1:
+                # change state and weight data for exploring "expert" results of sub-tree
+                new_experts_list.append(i)
 
-            time_before_run = time.time() - start_time
-            # tmp_expert_results = []
-            # for i in new_experts_list:
-            #     tmp_expert_results.append(sub_tree_pass(K, env, att_series, explore_results[i]["sub_tree"],
-            #                                             explore_results[i]["state_data"],
-            #                                             explore_results[i]["weight_data"],
-            #                                             n_back_track, explore_results[i]["theta"], init_zeta,
-            #                                             init_tot_scens, att_index, i))
+        time_before_run = time.time() - start_time
+        tmp_expert_results = Parallel(n_jobs=thread_count)(delayed(sub_tree_pass)(K, env, att_series,
+                                                                                  explore_results[i]["sub_tree"],
+                                                                                  n_back_track, theta_i_old,
+                                                                                  theta_init, zeta_init, init_tot_scens,
+                                                                                  att_index, i, max_depth,
+                                                                                  x_static=x_static)
+                                                           for i in new_experts_list)
 
-            tmp_expert_results = Parallel(n_jobs=thread_count)(delayed(sub_tree_pass)(K, env, att_series,
-                                                                                      explore_results[i]["sub_tree"],
-                                                                                      explore_results[i]["state_data"],
-                                                                                      explore_results[i]["weight_data"],
-                                                                                      n_back_track,
-                                                                                      theta_i_old,
-                                                                                      init_zeta, init_tot_scens,
-                                                                                      att_index, i, max_depth,
-                                                                                      x_static=x_static)
-                                                               for i in new_experts_list)
+        expert_results = []
+        new_experts = 0
 
-            expert_results = []
-            new_experts = 0
-            print(f"solved: {new_experts_list}, obtained: {[res[3] for res in tmp_expert_results]}")
-            for results, runtime, tot_nodes_new, i_explore in tmp_expert_results:
-                if results is None:
-                    # SCORE
-                    if pass_score[i_explore] > 0.999:
-                        new_experts += 1
-                        expert_results.append(explore_results[i_explore])
-                    tot_nodes += tot_nodes_new
-                    continue
-                # SCORE
-                score = (results["theta"] / theta_i_old) * max([results["zeta"] / init_zeta + 1, 1])
-                if score > 0.999:
+        for results_all, runtime, tot_nodes_new, i_explore in tmp_expert_results:
+            for results in results_all:
+                if results["zeta"] < 1e-4:
                     new_experts += 1
                     expert_results.append(results)
-                    if results["zeta"] < 1e-4 and results["theta"] - theta_i < -1e-8:
-                        # RESULT ROBUST
+                    if results["theta"] - theta_i < -1e-8:
+                        # NEW INCUMBENT SOLUTION
                         now = datetime.now().time()
                         theta_i, x_i, y_i = (results["theta"], results["x"], results["y"])
                         tau_i = copy.deepcopy(results["tau"])
                         tot_nodes_new = results["tot_nodes"]
-                        print("Instance OL {}, {}: SUB TREE PASS ROBUST ({}) (time {})   :theta = {},    "
+                        print("Instance DG {}, {}: SUB TREE PASS ROBUST ({}) (time {})   :theta = {},    "
                               "zeta = {}   Xi{}".format(env.inst_num, i_explore, np.round(time_before_run + runtime, 4),
                                                         now, np.round(theta_i, 4), np.round(results["zeta"], 4),
                                                         [len(t) for t in tau_i.values()]))
@@ -227,40 +162,18 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
                         inc_x[time_before_run + runtime] = x_i
                         inc_y[time_before_run + runtime] = y_i
                         inc_tot_nodes[time_before_run + runtime] = tot_nodes + tot_nodes_new
-                # always
-                tot_nodes += tot_nodes_new
+            # todo: change this
+            tot_nodes += tot_nodes_new
 
-            for results in expert_results:
-                try:
-                    state_data = np.vstack([state_data, results["state_data"]])
-                except ValueError:
-                    state_data = results["state_data"]
-                try:
-                    weight_data = np.vstack([weight_data, results["weight_data"]])
-                except ValueError:
-                    weight_data = results["weight_data"]
-
-        else:
-            for i in np.arange(len(pass_score) - num_explore, len(pass_score)):
-                if pass_score[i] > 0.999 and len(explore_results[i]["state_data"]) > 1:
-                    # if score diverges 10 percent from best one, add it
-                    # add state and weight data
-                    try:
-                        state_data = np.vstack([state_data, explore_results[i]["state_data"]])
-                    except ValueError:
-                        state_data = explore_results[i]["state_data"]
-                    try:
-                        weight_data = np.vstack([weight_data, explore_results[i]["weight_data"]])
-                    except ValueError:
-                        weight_data = explore_results[i]["weight_data"]
-                    new_experts += 1
-
-        # update weights
-        if new_experts > 0 and len(state_data[-new_experts:]):
-            print(f"Instance OL {env.inst_num}: update weights with {new_experts} new experts. "
-                  f"ratio = {strat_rand_ratio}, tot_data_points = {len(state_data)}")
-            update_weights_fun(state_data[-new_experts:], weight_data[-new_experts:], depth=depth, width=width,
-                               weight_model_name=weight_model_name)
+        for results in expert_results:
+            try:
+                state_data = np.vstack([state_data, results["state_data"]])
+            except ValueError:
+                state_data = results["state_data"]
+            try:
+                weight_data = np.vstack([weight_data, results["weight_data"]])
+            except ValueError:
+                weight_data = results["weight_data"]
 
         # save every 10 minutes
         if time.time() - start_time - prev_save_time > 10 * 60:
@@ -271,9 +184,9 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                            "state_data": state_data, "weight_data": weight_data}
-            with open("Results/Decisions/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num),
+            with open("Data/ResultsEuclDist/Data/tmp_results_{}_rf{}.pickle".format(problem_type, env.inst_num),
                       "wb") as handle:
-                pickle.dump([env, tmp_results], handle)
+                pickle.dump(tmp_results, handle)
     # termination results
     runtime = time.time() - start_time
     inc_thetas_t[runtime] = theta_i
@@ -285,30 +198,16 @@ def algorithm(K, env, att_series, sub_tree=True, n_back_track=2, time_limit=20 *
 
     now = datetime.now().time()
 
-    print("Instance OL {}, completed at {}, solved in {} minutes".format(env.inst_num, now, runtime / 60))
+    print("Instance DG {}, completed at {}, solved in {} minutes".format(env.inst_num, now, runtime / 60))
     results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i, "inc_thetas_t": inc_thetas_t,
                "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                "state_data": state_data, "weight_data": weight_data}
 
-    with open("Results/Decisions/final_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
-        pickle.dump([env, results], handle)
+    with open(f"Data/ResultsEuclDist/Data/final_results_{problem_type}_rf{env.inst_num}.pickle", "wb") as handle:
+        pickle.dump(results, handle)
 
-    try:
-        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
-    except:
-        pass
     return results
-
-
-def parallel_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, att_index, explore_bool,
-                  weight_model_name, sub_tree=False, x_static=None):
-    if explore_bool:
-        return explore_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, att_index,
-                            sub_tree=sub_tree, x_static=x_static)
-    else:
-        return strategy_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, weight_model_name,
-                             att_index, x_static=x_static)
 
 
 def init_pass(K, env, att_series, x_static=None):
@@ -414,7 +313,33 @@ def init_pass(K, env, att_series, x_static=None):
     return theta, x, y, N_set, tau, N_att_set, tot_nodes, tot_scens, init_zeta
 
 
-def explore_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i, att_index, sub_tree=False,
+def init_scen(K, env, att_series, x_static=None):
+    try:
+        stat_mode = scenario_fun_static_build(env, x_static)
+    except:
+        stat_mode = None
+
+    det_model = scenario_fun_deterministic_build(env)
+
+    tau = {k: [] for k in np.arange(K)}
+    tau[0].append(env.init_uncertainty)
+
+    # run master problem
+    theta, x, y, _ = scenario_fun_build(K, tau, env)
+
+    # run sub problem
+    init_zeta, xi_new = separation_fun(K, x, y, theta, env, tau)
+
+    # new tau to be saved in N_set
+    tau = {k: [] for k in np.arange(K)}
+    tau[0] = xi_new.reshape([1, -1])
+    tau_att = {k: [] for k in np.arange(K)}
+    tau_att[0] = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y, x_static=x_static,
+                                    stat_model=stat_mode, det_model=det_model).reshape([1, -1])
+    return tau, tau_att, init_zeta
+
+
+def explore_pass(K, env, att_series, tau, tau_att, theta_i, theta_init, zeta_init, tot_scens_init, att_index,
                  x_static=None):
     # Initialize
     tot_nodes = 0
@@ -441,10 +366,6 @@ def explore_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i,
     while True:
         # MASTER PROBLEM
         if new_model:
-            try:
-                del model
-            except:
-                pass
             # master problem
             theta, x, y, model = scenario_fun_build(K, tau, env)
         else:
@@ -471,8 +392,7 @@ def explore_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i,
         zeta, xi = separation_fun(K, x, y, theta, env, tau)
         scen_att = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
                                       stat_model=stat_mode, det_model=det_model)
-        if sub_tree:
-            pass_track.append([tau, tau_att])
+        pass_track.append([tau, tau_att])
 
         full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
         if len(full_list) == 0:
@@ -483,7 +403,7 @@ def explore_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i,
             k_new = np.random.randint(K)
             # STATE DATA
             tot_scens = np.sum([len(t) for t in tau.values()])
-            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_i, tau_att, theta_i, zeta_i,
+            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_init, tau_att, theta_init, zeta_init,
                                    att_index)
             try:
                 state_data = np.vstack([state_data, tau_s])
@@ -550,7 +470,9 @@ def strategy_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i
     tot_nodes = 0
 
     # weight model
-    weight_model = load_model(weight_model_name)
+    # weight_model = load_model(weight_model_name)
+    weight_model = joblib.load(weight_model_name)
+
     start_time = time.time()
     # K-branch and bound algorithm
     new_model = True
@@ -621,9 +543,9 @@ def strategy_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i
             # predict subset
             # STATE FEATURES (based on master and sub problem)
             tot_scens = np.sum([len(t) for t in tau.values()])
-            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_i, tau_att, theta_i, zeta_i,
+            tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_init, tau_att, theta_init, zeta_init,
                                    att_index)
-            K_set = predict_subset(K, tau_att, scen_att, weight_model, None, att_index, tau_s)
+            K_set = predict_subset(K, tau_att, scen_att, weight_model, att_index, tau_s)
             k_new = K_set[0]
         else:
             K_prime = min(K, full_list[-1] + 2)
@@ -661,34 +583,8 @@ def strategy_pass(K, env, att_series, tau, tau_att, theta_i, zeta_i, tot_scens_i
     return results, N_set, N_att_set
 
 
-def init_scen(K, env, att_series, x_static=None):
-    try:
-        stat_mode = scenario_fun_static_build(env, x_static)
-    except:
-        stat_mode = None
-
-    det_model = scenario_fun_deterministic_build(env)
-
-    tau = {k: [] for k in np.arange(K)}
-    tau[0].append(env.init_uncertainty)
-
-    # run master problem
-    theta, x, y, _ = scenario_fun_build(K, tau, env)
-
-    # run sub problem
-    init_zeta, xi_new = separation_fun(K, x, y, theta, env, tau)
-
-    # new tau to be saved in N_set
-    tau = {k: [] for k in np.arange(K)}
-    tau[0] = xi_new.reshape([1, -1])
-    tau_att = {k: [] for k in np.arange(K)}
-    tau_att[0] = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y, x_static=x_static,
-                                    stat_model=stat_mode, det_model=det_model).reshape([1, -1])
-    return tau, tau_att, init_zeta
-
-
-def sub_tree_pass(K, env, att_series, pass_track, state_data_init, weight_data_init, n_back_track, theta_i, zeta_i,
-                  tot_scens_i, att_index, i_explore, max_depth=5, x_static=None):
+def sub_tree_pass(K, env, att_series, pass_track, state_data_init, weight_data_init, n_back_track, theta_i, theta_init, zeta_init,
+                  tot_scens_init, att_index, i_explore, max_depth=5, x_static=None):
     # Initialize
     results = None
 
@@ -795,7 +691,7 @@ def sub_tree_pass(K, env, att_series, pass_track, state_data_init, weight_data_i
                 K_set = np.arange(K)
                 # STATE DATA
                 tot_scens = np.sum([len(t) for t in tau.values()])
-                tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_i, tau_att, theta_i, zeta_i,
+                tau_s = state_features(K, env, theta, zeta, x, y, tot_scens, tot_scens_init, tau_att, theta_init, zeta_init,
                                        att_index)
                 try:
                     state_data_dict[new_node_index] = np.vstack([state_data_dict[node_index], tau_s])
@@ -815,10 +711,10 @@ def sub_tree_pass(K, env, att_series, pass_track, state_data_init, weight_data_i
             if theta - theta_i > -1e-8:
                 # delete stuff
                 del level_next[new_node_index]
-                del state_data_dict[new_node_index]
-                del weight_data_dict[new_node_index]
-                del tau_dict[new_node_index]
-                del tau_att_dict[new_node_index]
+                # del state_data_dict[new_node_index]
+                # del weight_data_dict[new_node_index]
+                # del tau_dict[new_node_index]
+                # del tau_att_dict[new_node_index]
                 continue
 
             # check if robust
@@ -838,10 +734,10 @@ def sub_tree_pass(K, env, att_series, pass_track, state_data_init, weight_data_i
                            "state_data": state_data_final, "weight_data": weight_data_final, "tot_scens": tot_scens}
                 # delete stuff
                 del level_next[new_node_index]
-                del state_data_dict[new_node_index]
-                del weight_data_dict[new_node_index]
-                del tau_dict[new_node_index]
-                del tau_att_dict[new_node_index]
+                # del state_data_dict[new_node_index]
+                # del weight_data_dict[new_node_index]
+                # del tau_dict[new_node_index]
+                # del tau_att_dict[new_node_index]
                 continue
 
             xi_dict[new_node_index] = xi
@@ -882,3 +778,51 @@ def sub_tree_pass(K, env, att_series, pass_track, state_data_init, weight_data_i
     # termination actions
     runtime = time.time() - start_time
     return results, runtime, tot_nodes, i_explore
+
+
+# THIS ON OWN LAPTOP, STRATEGY ON CLUSTER
+def data_and_train(K, env_list, att_series, n_back_track=2, time_limit=20 * 60, problem_type="test",
+                       thread_count=8, max_depth=5, width=50, depth=1, train_on=None, init_data=None):
+    # DATA GEN
+    if init_data:
+        with open(f"Results/Data/all_data_{problem_type}_10.pickle", "rb") as handle:
+            X_list, Y_list = pickle.load(handle).values()
+        num_envs = len(env_list) + len(X_list)
+    else:
+        X_list = []
+        Y_list = []
+        num_envs = len(env_list)
+
+    results = []
+    for env in env_list:
+        results.append(data_gen_fun(K, env, att_series, n_back_track, time_limit, problem_type,
+                                        thread_count, max_depth))
+        X_list.append(results[-1]["state_data"])
+        Y_list.append(results[-1]["weight_data"])
+
+    # train on number of instances
+    if train_on is None:
+        train_on = [num_envs]
+
+    for num_data in train_on:
+        X = X_list[0]
+        Y = Y_list[0]
+        for c in np.arange(1, num_data):
+            X = np.vstack([X, X_list[c]])
+            Y = np.hstack([Y, Y_list[c]])
+
+        # train ml model
+        success_model_name = f"ResultsEuclAtt/RFModels/rf_model_{problem_type}_rf{num_data}.joblib"
+        acc, feat_imp = update_model_fun(X, Y, depth, width, success_model_name=success_model_name)
+        print(f"{num_data}: num_data = {len(Y)}, validation accuracy = {acc}")
+
+        # feature importance
+        feature_description = ["theta", "theta_pre", "zeta", "zeta_pre", "depth"] + att_series
+        feature_importance = pd.Series(feat_imp, index=feature_description)
+        print(f"RF feature importance: \n{feature_importance}")
+
+        # save trained ml model
+        model_info = {"data_len": len(Y), "accuracy": acc, "num_instances": num_data,
+                      "feature_importance": feature_importance}
+        with open(f"Data/ResultsEuclDist/RFModels/rf_info_{problem_type}_rf{num_data}.pickle", "wb") as handle:
+            pickle.dump(model_info, handle)

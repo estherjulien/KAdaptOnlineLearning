@@ -86,10 +86,10 @@ class Graph:
         plt.ylim(0, 10)
 
         if tmp:
-            plt.savefig(f"Results/Plots/tmp_graph_{alg_type}_inst{self.inst_num}_it{it}")
+            plt.savefig(f"tmp_graph_{alg_type}_inst{self.inst_num}_it{it}")
         else:
-            plt.savefig(f"Results/Plots/final_graph_{alg_type}_inst{self.inst_num}")
-            plt.savefig(f"Results/Plots/final_graph_{alg_type}_inst{self.inst_num}.pdf")
+            plt.savefig(f"final_graph_{alg_type}_inst{self.inst_num}")
+            plt.savefig(f"final_graph_{alg_type}_inst{self.inst_num}.pdf")
         plt.close()
 
     @staticmethod

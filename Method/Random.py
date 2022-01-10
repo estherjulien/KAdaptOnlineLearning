@@ -133,8 +133,8 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                            "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all}
-            with open("Results/Decisions/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
-                pickle.dump([env, tmp_results], handle)
+            with open("Data/Results/Decisions/inst_results/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
+                pickle.dump(tmp_results, handle)
         iteration += 1
     # termination results
     runtime = time.time() - start_time
@@ -152,8 +152,8 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
                "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all}
 
-    with open(f"Results/Decisions/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
-        pickle.dump([env, results], handle)
+    with open(f"Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+        pickle.dump(results, handle)
 
     try:
         env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)

@@ -1,18 +1,22 @@
-from Method.SucPred.Strategy import algorithm as algorithm_s
+from Method.EuclDist.Strategy import algorithm as algorithm_s
 from joblib import Parallel, delayed
 import numpy as np
 import pickle
+
+time_limit = 0.5 * 60 * 60
 
 thread_count = 8
 num_instances = 16
 gamma_perc = 0.3
 first_stage_ratio = 0.1
+depth = 1
+width = 50
 train_on = [25, 50, 75, 100]
 K_train = 2
 N_train = 30
 obtain_data = True
 
-# SUCCESS PREDICTION
+# EUCLIDEAN DISTANCE
 att_series = ["coords", "obj_det", "y_det", "slack", "const_to_z_dist", "const_to_const_dist"]
 
 for N in [30, 40]:
@@ -27,7 +31,6 @@ for N in [30, 40]:
             continue
 
         # TEST
-        time_limit = 0.5 * 60 * 60
         print()
         print(f"START STRATEGY K = {K}, N = {N}")
 

@@ -2,8 +2,6 @@ from CapitalBudgetingLoans.Environment.Env import *
 from CapitalBudgetingLoans.ProblemMILPs.functions_loans import robust_counterpart_voronoi
 from OutputFunctions.hyperplanes import voronoi_hyperlanes
 import matplotlib.pyplot as plt
-import gurobipy as gp
-from gurobipy import GRB
 import seaborn as sn
 import numpy as np
 import pickle
