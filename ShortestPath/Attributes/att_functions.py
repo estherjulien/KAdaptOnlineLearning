@@ -158,7 +158,8 @@ def state_features(K, env, theta, zeta, x, y, tot_nodes, tot_nodes_i, df_att, th
     return np.array(features)
 
 
-def weight_labels(K, X, X_scen, k_new, att_index):
+def weight_labels(K, X, scen_att, scen_att_k, k_new, att_index):
+    X_scen = np.array(scen_att + scen_att_k[k_new]).reshape([1, -1])
     num_att = len(X_scen)
     num_att_type = len(att_index)
 

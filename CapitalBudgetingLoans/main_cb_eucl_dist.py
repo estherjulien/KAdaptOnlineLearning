@@ -40,3 +40,12 @@ for N in [10]:
                                                                problem_type=problem_type,
                                                                time_limit=time_limit)
                                           for i in np.arange(num_instances))
+
+            # combine all results
+            results = dict()
+            for i in np.arange(num_instances):
+                with open(f"Data/ResultsEuclDist/Decisions/inst_results/final_results_{problem_type}_inst{i}.pickle", "rb") \
+                        as handle:
+                    results[i] = pickle.load(handle)
+            with open(f"Data/ResultsEuclDist/Decisions/FINAL_results_{problem_type}_{num_instances}.pickle", "wb") as handle:
+                pickle.dump(results, handle)

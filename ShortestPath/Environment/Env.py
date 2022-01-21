@@ -36,7 +36,7 @@ class Graph:
         print(f"Instance {self.inst_num}: actual gamma = {self.gamma}")
         self.gamma_perc = gamma_perc
         self.first_stage_ratio = first_stage_ratio
-        self.plot_graph()
+        # self.plot_graph()
 
     def set_gamma_perc(self, gamma_perc):
         self.gamma_perc = gamma_perc

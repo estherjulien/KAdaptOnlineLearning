@@ -1,8 +1,7 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.ProblemMILPs.functions import *
+from ClusterCapitalBudgeting.ProblemFunctions.functions_milp import *
 
 from datetime import datetime
-import pandas as pd
 import numpy as np
 import pickle
 import copy

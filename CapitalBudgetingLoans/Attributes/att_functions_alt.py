@@ -29,8 +29,10 @@ def state_features(K, env, theta, zeta, x, y, depth, depth_i, df_att, theta_i, z
     features.append(theta/theta_pre)
     # violation
     features.append(zeta/zeta_i)
-    # violation compared to before
-    features.append(zeta/zeta_pre)
+    try:
+        features.append(zeta/zeta_pre)
+    except ZeroDivisionError:
+        features.append(1)
     # depth
     features.append(depth/depth_i)
 
@@ -112,7 +114,7 @@ def update_model_fun_nn(X, Y, expert_data_num=0, depth=1, width=10, success_mode
 
 
 def update_model_fun(X, Y, expert_data_num=0, depth=1, width=10, success_model_name="test"):
-    X_train, X_val, Y_train, Y_val = train_test_split(X[:, :-1], Y, test_size=0.1)
+    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.1)
 
     rf = RandomForestClassifier()
     rf.fit(X_train, Y_train)
@@ -120,8 +122,7 @@ def update_model_fun(X, Y, expert_data_num=0, depth=1, width=10, success_model_n
     # evaluation
     score_rf = rf.score(X_val, Y_val)
 
-    print(f"RF validation accuracy = {score_rf} \n")
     # save
     joblib.dump(rf, success_model_name)
 
-    return score_rf
+    return score_rf, rf.feature_importances_

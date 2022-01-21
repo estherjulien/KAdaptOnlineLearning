@@ -1,8 +1,4 @@
-from CapitalBudgetingLoans.ProblemMILPs.functions import *
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.optimizers import SGD
-from tensorflow.keras.models import load_model
+from ProblemFunctions.functions_milp import *
 
 import numpy as np
 
@@ -145,7 +141,10 @@ def const_to_z_fun(K, scen, env, theta, x_input, y_input):
 
     sum_dist = sum(dist)
     for k in np.arange(K):
-        dist_final[k].append(dist[k]/sum_dist)
+        if sum_dist == 0:
+            dist_final[k].append(0)
+        else:
+            dist_final[k].append(dist[k]/sum_dist)
 
     # CONST 2
     dist = []
@@ -211,18 +210,6 @@ def const_to_const_fun(K, scen, env, tau):
         cos[k].append(max(cos_tmp))
 
     return {k: list(np.nan_to_num(cos[k], nan=0.0)) for k in np.arange(K)}
-
-
-# def state_features(K, env, theta, zeta, x, y, tot_nodes, tot_nodes_i, df_att, theta_i, zeta_i, att_index):
-#     features = []
-#     # objective
-#     features.append(theta/theta_i)
-#     # violation
-#     features.append(zeta/zeta_i)
-#     # depth
-#     features.append(tot_nodes/tot_nodes_i)
-#
-#     return np.array(features)
 
 
 def weight_labels(K, X, scen_att, scen_att_k, k_new, att_index):
@@ -372,36 +359,3 @@ def init_weights_fun(K, env, att_series, init_weights=None):
 
     weights = np.array(weight_val)
     return weights, att_index
-
-
-def update_weights_fun(state_features, weight_data, depth=1, width=10, weight_model_name="test"):
-    # maybe try different architectures? only report the best one
-    n_features = np.shape(state_features)[1]
-    n_labels = np.shape(weight_data)[1]
-
-    try:
-        weight_model = load_model(weight_model_name)
-        # increase learning rate as model continues?
-        opt = SGD(learning_rate=0.001, momentum=0.9)
-        # compile the model
-        weight_model.compile(optimizer=opt, loss='categorical_crossentropy')
-        # fit the model on new data
-        weight_model.fit(state_features, weight_data, epochs=5, batch_size=32, verbose=0)
-    except:
-        weight_model = Sequential()
-        # first layer after input layer
-        weight_model.add(Dense(width, activation='relu', input_dim=n_features))
-        for d in np.arange(depth-1):
-            weight_model.add(Dense(width, activation='relu'))
-        # output layer
-        weight_model.add(Dense(n_labels, activation='softmax'))
-        # define the optimization algorithm
-        opt = SGD(learning_rate=0.01, momentum=0.9)
-        # compile the model
-        weight_model.compile(optimizer=opt, loss='categorical_crossentropy')
-        # fit the model on data
-        weight_model.fit(state_features, weight_data, epochs=5, batch_size=32, verbose=0)
-
-    # save weight model
-    weight_model.save(weight_model_name)
-

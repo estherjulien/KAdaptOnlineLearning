@@ -1,5 +1,6 @@
 # CHANGE THIS FOR NEW PROBLEMS
 from CapitalBudgetingLoans.Attributes.att_functions import *
+from CapitalBudgetingLoans.ProblemMILPs.functions import *
 
 from datetime import datetime
 import numpy as np
@@ -190,10 +191,10 @@ def algorithm(K, env, att_series, equal_weights=False, weight_model_name=None, t
     with open(f"Data/ResultsEuclDist/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
-    try:
-        env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
-    except AttributeError:
-        pass
+    # try:
+    #     env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
+    # except AttributeError:
+    #     pass
     return results
 
 

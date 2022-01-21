@@ -1,40 +1,64 @@
-from CapitalBudgetingLoans.ProblemMILPs.functions import *
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.optimizers import SGD
-from tensorflow.keras.models import load_model
+from ProblemFunctions.functions_milp import *
+
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 
 import numpy as np
+import joblib
 
 
-def predict_subset(K, X, X_scen, weight_model, init_weights, att_index, state_features):
-    num_att = len(X_scen)
-    if init_weights is None:
-        # predict weights
-        weight_type = weight_model.predict(state_features.reshape([1, -1]))[0]
-        # print(f"Instance {instance}: weights = {weight_type}")
-        num_att_type = len(weight_type)
-        # return predicted weights into weight vector
-        weights = np.zeros(num_att)
-        for i in np.arange(num_att_type):
-            weights[att_index[i]] = weight_type[i]
-    else:
-        weights = init_weights
-    # take weighted euclidean distance from rows of X and X_scen
-    X_dist = dict()
+def predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, state_features):
+    X = input_fun(K, state_features, tau_att, scen_att, scen_att_k, att_index)
+
+    pred_tmp = success_model.predict_proba(X)
+
+    success_prediction = np.array([i[1] for i in pred_tmp])
+    # print(f"Success prediction = {[np.round(s, 3) for s in success_prediction]}")
+    order = np.argsort(success_prediction)
+    return order[::-1]
+
+
+def state_features(theta, zeta, depth, depth_i, theta_i, zeta_i, theta_pre, zeta_pre):
+    # objective, objective compared to previous, violation
+    features = [theta / theta_i, theta / theta_pre, zeta / zeta_i]
+    # violation compared to previous
+    try:
+        features.append(zeta/zeta_pre)
+    except ZeroDivisionError:
+        features.append(1)
+    # depth
+    features.append(depth/depth_i)
+
+    return np.array(features)
+
+
+def input_fun(K, state_features, tau_att, scen_att_pre, scen_att_k, att_index):
+    att_num = len(att_index)
+    scen_att = {k: np.array(scen_att_pre + scen_att_k[k]) for k in np.arange(K)}
+
+    diff_info = {k: [] for k in np.arange(K)}
     for k in np.arange(K):
-        X_dist[k] = np.zeros([len(X[k]), num_att])
-        for scen in np.arange(len(X[k])):
-            X_dist[k][scen] = weights*(X[k][scen] - X_scen)**2
+        for att_type in np.arange(att_num):
+            diff_info[k].append(np.linalg.norm(np.mean(tau_att[k][:, att_index[att_type]], axis=0) - scen_att[k][att_index[att_type]]) / len(att_index[att_type]))
 
-    # first take WED per scenario and new scenario, then average it per subset
-    distance_array = np.zeros(K)
-    for k in np.arange(K):
-        distance_array[k] = np.mean(np.sqrt(np.sum(X_dist[k], axis=1)))
+    X = np.array([np.hstack([state_features, diff_info[k]]) for k in np.arange(K)])
 
-    order = np.argsort(distance_array)
+    return X
 
-    return order
+
+def update_model_fun(X, Y, success_model_name="test"):
+    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.1)
+
+    rf = RandomForestClassifier()
+    rf.fit(X_train, Y_train)
+
+    # evaluation
+    score_rf = rf.score(X_val, Y_val)
+
+    # save
+    joblib.dump(rf, success_model_name)
+
+    return score_rf, rf.feature_importances_
 
 
 def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y, x_static=None, stat_model=None, det_model=None):
@@ -145,7 +169,10 @@ def const_to_z_fun(K, scen, env, theta, x_input, y_input):
 
     sum_dist = sum(dist)
     for k in np.arange(K):
-        dist_final[k].append(dist[k]/sum_dist)
+        if sum_dist == 0:
+            dist_final[k].append(0)
+        else:
+            dist_final[k].append(dist[k]/sum_dist)
 
     # CONST 2
     dist = []
@@ -213,71 +240,14 @@ def const_to_const_fun(K, scen, env, tau):
     return {k: list(np.nan_to_num(cos[k], nan=0.0)) for k in np.arange(K)}
 
 
-# def state_features(K, env, theta, zeta, x, y, tot_nodes, tot_nodes_i, df_att, theta_i, zeta_i, att_index):
-#     features = []
-#     # objective
-#     features.append(theta/theta_i)
-#     # violation
-#     features.append(zeta/zeta_i)
-#     # depth
-#     features.append(tot_nodes/tot_nodes_i)
-#
-#     return np.array(features)
-
-
-def weight_labels(K, X, scen_att, scen_att_k, k_new, att_index):
-    X_scen = np.array(scen_att + scen_att_k[k_new])
-    num_att = len(X_scen)
-    num_att_type = len(att_index)
-
-    X_dist = dict()
-    for k in np.arange(K):
-        X_dist[k] = np.zeros([len(X[k]), num_att])
-        for scen in np.arange(len(X[k])):
-            X_dist[k][scen] = (X[k][scen] - X_scen)**2
-
-    distance_array = np.zeros([K, num_att])
-    for k in np.arange(K):
-        distance_array[k] = np.mean(X_dist[k], axis=0)
-
-    # group together per attribute type
-    att_type = np.zeros([K, num_att_type])
-    for i in np.arange(num_att_type):
-        for k in np.arange(K):
-            att_type[k, i] = np.mean(distance_array[k][att_index[i]])
-
-    # compare attributes of k_new to other subsets
-    rel_att_type = np.zeros(num_att_type)
-    for i in np.arange(num_att_type):
-        if att_type[k_new, i] == 0:
-            rel_att_type[i] = 1
-        else:
-            rel_att_type[i] = np.sum([att_type[k, i]/att_type[k_new, i] for k in np.arange(K) if k != k_new])
-
-    weights = np.zeros(num_att_type)
-    weights[np.argmax(rel_att_type)] = 1
-    return weights
-
-
-def init_weights_fun(K, env, att_series, init_weights=None):
+def att_index_maker(env, att_series):
     # create list of attributes
-    weight_val = []
     att_index = []
 
     if "coords" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["xi"] for i in np.arange(env.xi_dim)]
-        except:
-            weight_val += [1.0 for i in np.arange(env.xi_dim)]
         # index
         att_index.append(np.arange(env.xi_dim))
     if "obj_det" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["obj_det"]]
-        except:
-            weight_val += [1.0]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -285,11 +255,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
         except:
             att_index.append(np.arange(1))
     if "x_det" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["x_det"] for i in np.arange(env.x_dim)]
-        except:
-            weight_val += [1.0 for i in np.arange(env.y_dim)]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -297,11 +262,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
         except:
             att_index.append(np.arange(env.x_dim))
     if "y_det" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["y_det"] for i in np.arange(env.y_dim)]
-        except:
-            weight_val += [1.0 for i in np.arange(env.y_dim)]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -310,11 +270,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
             att_index.append(np.arange(env.y_dim))
 
     if "obj_stat" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["obj_stat"]]
-        except:
-            weight_val += [1.0]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -322,11 +277,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
         except:
             att_index.append(np.arange(1))
     if "y_stat" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["y_stat"] for i in np.arange(env.y_dim)]
-        except:
-            weight_val += [1.0 for i in np.arange(env.y_dim)]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -334,11 +284,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
         except:
             att_index.append(np.arange(env.y_dim))
     if "slack" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["slack_K"] for k in np.arange(2)]
-        except:
-            weight_val += [1.0 for k in np.arange(2)]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -346,11 +291,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
         except:
             att_index.append(np.arange(2))
     if "const_to_z_dist" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["c_to_z_K"] for k in np.arange(2)]
-        except:
-            weight_val += [1.0 for k in np.arange(2)]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -358,11 +298,6 @@ def init_weights_fun(K, env, att_series, init_weights=None):
         except:
             att_index.append(np.arange(2))
     if "const_to_const_dist" in att_series:
-        # weights
-        try:
-            weight_val += [init_weights["c_to_c_K"] for k in np.arange(2)]
-        except:
-            weight_val += [1.0 for k in np.arange(2)]
         # index
         try:
             last_index = att_index[-1][-1]
@@ -370,38 +305,4 @@ def init_weights_fun(K, env, att_series, init_weights=None):
         except:
             att_index.append(np.arange(2))
 
-    weights = np.array(weight_val)
-    return weights, att_index
-
-
-def update_weights_fun(state_features, weight_data, depth=1, width=10, weight_model_name="test"):
-    # maybe try different architectures? only report the best one
-    n_features = np.shape(state_features)[1]
-    n_labels = np.shape(weight_data)[1]
-
-    try:
-        weight_model = load_model(weight_model_name)
-        # increase learning rate as model continues?
-        opt = SGD(learning_rate=0.001, momentum=0.9)
-        # compile the model
-        weight_model.compile(optimizer=opt, loss='categorical_crossentropy')
-        # fit the model on new data
-        weight_model.fit(state_features, weight_data, epochs=5, batch_size=32, verbose=0)
-    except:
-        weight_model = Sequential()
-        # first layer after input layer
-        weight_model.add(Dense(width, activation='relu', input_dim=n_features))
-        for d in np.arange(depth-1):
-            weight_model.add(Dense(width, activation='relu'))
-        # output layer
-        weight_model.add(Dense(n_labels, activation='softmax'))
-        # define the optimization algorithm
-        opt = SGD(learning_rate=0.01, momentum=0.9)
-        # compile the model
-        weight_model.compile(optimizer=opt, loss='categorical_crossentropy')
-        # fit the model on data
-        weight_model.fit(state_features, weight_data, epochs=5, batch_size=32, verbose=0)
-
-    # save weight model
-    weight_model.save(weight_model_name)
-
+    return att_index

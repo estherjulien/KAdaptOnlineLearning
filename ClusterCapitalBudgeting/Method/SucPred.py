@@ -1,10 +1,10 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.ProblemMILPs.functions import *
-from ShortestPath.Attributes.att_functions_alt import *
+from ProblemFunctions.functions_milp import *
+from ProblemFunctions.att_functions_alt import *
+from ProblemFunctions.att_functions import *
 
-from tensorflow.keras.models import load_model
+
 from datetime import datetime
-import pandas as pd
 import numpy as np
 import pickle
 import copy
@@ -168,7 +168,7 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
                            "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
                            "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                            "mp_time": mp_time, "sp_time": sp_time}
-            with open(f"ResultsSucPred/Decisions/inst_results/tmp_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+            with open(f"ResultsSucPred/Decisions/inst_results/tmp_results_{problem_type}_{env.inst_num}.pickle", "wb") as handle:
                 pickle.dump(tmp_results, handle)
         iteration += 1
 
@@ -189,13 +189,9 @@ def algorithm(K, env, att_series, success_model_name=None, time_limit=20 * 60, p
                "runtime": runtime, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
                "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all, "att_all": att_all}
 
-    with open(f"ResultsSucPred/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+    with open(f"ClusterCapitalBudgeting/Data/ResultsSucPred/Decisions/inst_results/final_results_{problem_type}_{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
-    # try:
-    #     env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
-    # except AttributeError:
-    #     pass
     return results
 
 
