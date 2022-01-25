@@ -7,15 +7,16 @@ import numpy as np
 import joblib
 
 
-def predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, state_features):
+def predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, state_features, nn_used=False):
     X = input_fun(K, state_features, tau_att, scen_att, scen_att_k, att_index)
 
-    pred_tmp = success_model.predict_proba(X)
-
-    success_prediction = np.array([i[1] for i in pred_tmp])
-    # print(f"Success prediction = {[np.round(s, 3) for s in success_prediction]}")
+    if nn_used:
+        success_prediction = success_model.predict(X)[:, 0]
+    else:
+        pred_tmp = success_model.predict_proba(X)
+        success_prediction = np.array([i[1] for i in pred_tmp])
     order = np.argsort(success_prediction)
-    return order[::-1]
+    return order[::-1], success_prediction
 
 
 def state_features(theta, zeta, depth, depth_i, theta_i, zeta_i, theta_pre, zeta_pre):
@@ -44,21 +45,6 @@ def input_fun(K, state_features, tau_att, scen_att_pre, scen_att_k, att_index):
     X = np.array([np.hstack([state_features, diff_info[k]]) for k in np.arange(K)])
 
     return X
-
-
-def update_model_fun(X, Y, success_model_name="test"):
-    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.1)
-
-    rf = RandomForestClassifier()
-    rf.fit(X_train, Y_train)
-
-    # evaluation
-    score_rf = rf.score(X_val, Y_val)
-
-    # save
-    joblib.dump(rf, success_model_name)
-
-    return score_rf, rf.feature_importances_
 
 
 def attribute_per_scen(K, scen, env, att_series, tau, theta, x, y, x_static=None, stat_model=None, det_model=None):
@@ -202,40 +188,53 @@ def const_to_const_fun(K, scen, env, tau):
 
     # CONST 1
     scen_vec_0 = [sum(scen[j]*projects[p].psi[j]*projects[p].rev_nom for j in np.arange(env.xi_dim)) for p in np.arange(N)]
-    for k in np.arange(K):
-        if len(tau[k]) == 0:
+    if np.sum(scen_vec_0) == 0:
+        for k in np.arange(K):
             cos[k].append(0)
-            continue
-        cos_tmp = []
-        for xi in tau[k]:
-            xi_vec_0 = [sum(xi[j]*projects[p].psi[j]*projects[p].rev_nom for j in np.arange(env.xi_dim)) for p in np.arange(N)]
-            try:
-                similarity = (sum([xi_vec_0[j]*scen_vec_0[j] for j in np.arange(env.xi_dim)])) / \
-                             ((np.sqrt(sum(xi_vec_0[j] ** 2 for j in np.arange(env.xi_dim)))) *
-                              (np.sqrt(sum(xi_vec_0[j] ** 2 for j in np.arange(env.xi_dim)))))
-            except RuntimeWarning:
-                similarity = 0
-            cos_tmp.append(similarity)
+    else:
+        for k in np.arange(K):
+            if len(tau[k]) == 0:
+                cos[k].append(0)
+                continue
+            cos_tmp = []
+            for xi in tau[k]:
+                xi_vec_0 = [sum(xi[j]*projects[p].psi[j]*projects[p].rev_nom for j in np.arange(env.xi_dim)) for p in np.arange(N)]
+                if np.sum(xi_vec_0) == 0:
+                    cos_tmp.append(0)
+                else:
+                    similarity = (sum([xi_vec_0[p]*scen_vec_0[p] for p in np.arange(N)])) / \
+                                 ((np.sqrt(sum(xi_vec_0[p] ** 2 for p in np.arange(N)))) *
+                                  (np.sqrt(sum(scen_vec_0[p] ** 2 for p in np.arange(N)))))
 
-        # select cos with most similarity, so max cos
-        cos[k].append(max(cos_tmp))
+                    cos_tmp.append(similarity)
+
+            # select cos with most similarity, so max cos
+            cos[k].append(max(cos_tmp))
 
     # CONST 2
     scen_vec_0 = [sum(scen[j]*projects[p].phi[j]*projects[p].cost_nom for j in np.arange(env.xi_dim)) for p in np.arange(N)]
-    for k in np.arange(K):
-        if len(tau[k]) == 0:
+    if np.sum(scen_vec_0) == 0:
+        for k in np.arange(K):
             cos[k].append(0)
-            continue
-        cos_tmp = []
-        for xi in tau[k]:
-            xi_vec_0 = [sum(xi[j]*projects[p].phi[j]*projects[p].cost_nom for j in np.arange(env.xi_dim)) for p in np.arange(N)]
-            similarity = (sum([xi_vec_0[j]*scen_vec_0[j] for j in np.arange(env.xi_dim)])) / \
-                         ((np.sqrt(sum(xi_vec_0[j] ** 2 for j in np.arange(env.xi_dim)))) *
-                          (np.sqrt(sum(xi_vec_0[j] ** 2 for j in np.arange(env.xi_dim)))))
-            cos_tmp.append(similarity)
+    else:
+        for k in np.arange(K):
+            if len(tau[k]) == 0:
+                cos[k].append(0)
+                continue
+            cos_tmp = []
+            for xi in tau[k]:
+                xi_vec_0 = [sum(xi[j]*projects[p].phi[j]*projects[p].cost_nom for j in np.arange(env.xi_dim)) for p in np.arange(N)]
+                if np.sum(xi_vec_0) == 0:
+                    cos_tmp.append(0)
+                else:
+                    similarity = (sum([xi_vec_0[p]*scen_vec_0[p] for p in np.arange(N)])) / \
+                                 ((np.sqrt(sum(xi_vec_0[p] ** 2 for p in np.arange(N)))) *
+                                  (np.sqrt(sum(scen_vec_0[p] ** 2 for p in np.arange(N)))))
 
-        # select cos with most similarity, so max cos
-        cos[k].append(max(cos_tmp))
+                    cos_tmp.append(similarity)
+
+            # select cos with most similarity, so max cos
+            cos[k].append(max(cos_tmp))
 
     return {k: list(np.nan_to_num(cos[k], nan=0.0)) for k in np.arange(K)}
 

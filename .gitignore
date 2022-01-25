@@ -6,3 +6,5 @@
 *.pdf
 *.mps
 *.joblib
+./LearnCB/structured_data_regressor/
+*.json

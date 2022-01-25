@@ -11,7 +11,7 @@ import copy
 import time
 
 
-def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60):
+def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60, normalized=True):
     # STORE NEW NEXT SCENARIO IN EMPTY NODE, THAT'S NEW BEGINNING!
     #   - attributes need to be stored for this
     # INITIAL RUN ON ALL CORES FOR INITIAL ROBUST SOLUTIONS
@@ -64,14 +64,8 @@ def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60):
                                                                                               success_data_dict,
                                                                                               covered_nodes=covered_nodes,
                                                                                               level=level,
-                                                                                              time_limit=time_limit)
-
-    # save information
-    pd.Series([level, rt_mean, num_start_nodes, tot_scens_init, time_per_node, *num_runs_info],
-              index=["level", "rt_mean", "num_start_nodes", "tot_scens_init", "time_per_node",
-                     "num_runs_min", "num_runs_mean", "num_runs_max"],
-              dtype=float).to_pickle(f"CapitalBudgetingHigh/Data/RunInfo/"
-                                     f"run_info_{problem_type}_inst{env.inst_num}.pickle")
+                                                                                              time_limit=time_limit,
+                                                                                              normalized=normalized)
 
     # make input and success data final
     input_data = []
@@ -93,11 +87,18 @@ def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60):
     Y_90 = np.round(np.quantile(success_data, 0.9), 2)
     print(f"Instance SPD {env.inst_num}, completed at {now_nice}, solved in {runtime}s. "
           f"Data points = {len(success_data)}, Y: [{Y_10},{Y_mean},{Y_90}], R: {num_runs_info}")
-    results = {"X": input_data, "Y": success_data, "runtime": time.time() - start_time}
+    results = {"X": input_data, "Y": success_data}
 
     with open(f"CapitalBudgetingHigh/Data/Results/TrainData/inst_results/data_results_{problem_type}_"
               f"{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
+
+    # save information
+    pd.Series([level, rt_mean, num_start_nodes, tot_scens_init, time_per_node, *num_runs_info, runtime],
+              index=["level", "rt_mean", "num_start_nodes", "tot_scens_init", "time_per_node",
+                     "num_runs_min", "num_runs_mean", "num_runs_max", "runtime"],
+              dtype=float).to_pickle(f"CapitalBudgetingHigh/Data/RunInfo/"
+                                     f"run_info_{problem_type}_inst{env.inst_num}.pickle")
 
 
 def fill_subsets(K, env, att_series, x_static):
@@ -196,7 +197,7 @@ def init_pass(K, env, tau):
 
     theta_init = np.mean([res[0] for res in init_results])
     tot_scens_init = np.mean([res[1] for res in init_results])
-    theta_compete = np.quantile([res[0] for res in init_results], 0.25)
+    theta_compete = np.quantile([res[0] for res in init_results], 0.1)
     rt_mean = np.mean([res[2] for res in init_results])
     max_depth = np.quantile([res[1] for res in init_results], 0.9)
 
@@ -382,7 +383,8 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_compete,
     return input_data_dict, success_data_dict, tau_dict, runtime, covered_nodes, level
 
 
-def random_runs_from_nodes(K, env, theta_compete, tau_dict, success_data_dict, covered_nodes, level, time_limit=5*60):
+def random_runs_from_nodes(K, env, theta_compete, tau_dict, success_data_dict, covered_nodes, level, time_limit=5*60,
+                           normalized=True):
     # find starting nodes
     starting_nodes = []
     for node in covered_nodes[level]:
@@ -406,7 +408,7 @@ def random_runs_from_nodes(K, env, theta_compete, tau_dict, success_data_dict, c
         success_data_dict[level][node] = np.sum(np.array(thetas[i]) < theta_compete)/len(thetas[i])
 
     # get success predictions of other nodes in upper tree
-    success_data_dict = finish_success(K, success_data_dict, covered_nodes, level)
+    success_data_dict = finish_success(K, success_data_dict, covered_nodes, level, normalized)
 
     num_runs_info = [np.min(num_runs), np.mean(num_runs), np.max(num_runs)]
     return success_data_dict, len(starting_nodes), time_per_node, num_runs_info
@@ -423,7 +425,7 @@ def starting_nodes_pass(K, env, tau, time_per_node):
     return results
 
 
-def finish_success(K, success_data_dict, covered_nodes, max_depth):
+def finish_success(K, success_data_dict, covered_nodes, max_depth, normalized=True):
     all_levels = np.arange(2, max_depth)[::-1]
     for level in all_levels:
         for parent in covered_nodes[level]:
@@ -438,22 +440,28 @@ def finish_success(K, success_data_dict, covered_nodes, max_depth):
                 suc_prob += np.prod([prob_matrix[k, c[k]] for k in np.arange(K)])
             success_data_dict[level][parent] = suc_prob
 
-    # normalize per parent-child subtree
-    success_data_dict_final = {}
-    all_levels = np.arange(1, max_depth)
-    for level in all_levels:
-        for parent in covered_nodes[level]:
-            child_values = np.zeros(K)
-            if parent + (0,) not in success_data_dict[level+1]:
-                continue
-            for k in np.arange(K):
-                child_values[k] = success_data_dict[level+1][parent + (k,)]
+    if normalized:
+        # normalize per parent-child subtree
+        success_data_dict_final = {}
+        all_levels = np.arange(1, max_depth)
+        for level in all_levels:
+            for parent in covered_nodes[level]:
+                child_values = np.zeros(K)
+                if parent + (0,) not in success_data_dict[level+1]:
+                    continue
+                for k in np.arange(K):
+                    child_values[k] = success_data_dict[level+1][parent + (k,)]
 
-            if np.sum(child_values) == 0:
-                for k in np.arange(K):
-                    success_data_dict_final[parent + (k,)] = 0
-            else:
-                for k in np.arange(K):
-                    success_data_dict_final[parent + (k,)] = child_values[k]/np.sum(child_values)
+                if np.sum(child_values) == 0:
+                    for k in np.arange(K):
+                        success_data_dict_final[parent + (k,)] = 0
+                else:
+                    for k in np.arange(K):
+                        success_data_dict_final[parent + (k,)] = child_values[k]/np.sum(child_values)
+    else:
+        success_data_dict_final = {}
+        for level, nodes in success_data_dict.items():
+            for node, label in nodes.items():
+                success_data_dict_final[node] = label
 
     return success_data_dict_final

@@ -6,81 +6,90 @@ import pickle
 
 
 def plot_stuff(problem_type, K, N, num_inst):
-    results = dict()
+    results = [{}]
+    alg_types = ["Random"]
+    num_algs = len(results)
     for i in np.arange(num_inst):
-        with open(f"Results/{problem_type.upper()}/Decisions/final_results_{problem_type}_random_K{K}_N{N}_inst{i}.pickle", "rb") as handle:
-            results[i] = pickle.load(handle)
-        # with open(f"ShortestPath/Results/Decisions/final_results_spip_random_new_K4_N50_g30_fs10_inst{i}.pickle", "rb") as handle:
-        #     results[i] = pickle.load(handle)[1]
-    # PLOT RESULTS OVER RUNTIME
-    rt_tmp = np.max([np.round(results[i]["runtime"])])
-    run_time = rt_tmp - rt_tmp % 1800
-    t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, run_time+15, 15)])
-    num_grids = len(t_grid)
-    obj_norm = pd.DataFrame(index=t_grid, columns=[f"norm_{i}" for i in np.arange(num_inst)], dtype=np.float)
-    for i in np.arange(num_inst):
-        # normal
-        t_norm = np.zeros(num_grids)
-        theta_final = results[i]["theta"]
-        for t, theta in results[i]["inc_thetas_t"].items():
-            t_norm[t_grid > t] = theta/theta_final
-        obj_norm[f"norm_{i}"] = t_norm
 
-    obj_norm = np.array(obj_norm)
-    obj_norm[obj_norm == 0] = np.nan
+        with open(f"Results_25-1-22/Decisions/inst_results/final_results_cb_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+            results[0][i] = pickle.load(handle)
+        # with open(f"Results_24-1-22_p2/Decisions/inst_results/final_results_cb_suc_pred_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+        #     results[1][i] = pickle.load(handle)
+        # with open(f"CapitalBudgetingHigh/Data/Results/Decisions/inst_results/final_results_cb_suc_pred_nn_no_thresh_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+        #     results[2][i] = pickle.load(handle)
+
+    # PLOT RESULTS OVER RUNTIME
+    t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 30*60+15, 15)])
+    num_grids = len(t_grid)
+    obj = []
+    for a in np.arange(num_algs):
+        obj.append(pd.DataFrame(index=t_grid, columns=np.arange(num_inst), dtype=np.float))
+
+    for a in np.arange(num_algs):
+        for i in np.arange(num_inst):
+            # random
+            t_alg = np.zeros(num_grids)
+            theta_final = results[a][i]["theta"]
+            for t, theta in results[a][i]["inc_thetas_t"].items():
+                t_alg[t_grid > t] = theta/theta_final
+            obj[a][i] = t_alg
+
+        obj[a] = np.array(obj[a])
+        obj[a][obj[a] == 0] = np.nan
 
     sn.set_style("whitegrid")
     # plot results
-    avg_norm = np.quantile(obj_norm, 0.5, axis=1)
-    norm_10 = np.quantile(obj_norm, 0.1, axis=1)
-    norm_90 = np.quantile(obj_norm, 0.9, axis=1)
-    plt.fill_between(t_grid, norm_10, norm_90, color="k", alpha=0.5)
-    plt.plot(t_grid, avg_norm, "k", label="Random")
+    for a in np.arange(num_algs):
+        avg_random = np.quantile(obj[a], 0.5, axis=1)
+        random_10 = np.quantile(obj[a], 0.1, axis=1)
+        random_90 = np.quantile(obj[a], 0.9, axis=1)
+        plt.fill_between(t_grid, random_10, random_90, alpha=0.5)
+        plt.plot(t_grid, avg_random, label=alg_types[a])
 
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Relative Objective")
-    plt.legend()
-    plt.savefig(f"plot_runtime_{problem_type}_random_K{K}_N{N}_{num_inst}")
+    plt.legend(loc=4)
+    plt.savefig(f"plot_runtime_{problem_type}_K{K}_N{N}_{num_inst}")
     plt.close()
 
     # PLOT RESULTS OVER NODES
-    n_grid_max = np.max([results[i]["tot_nodes"] for i in np.arange(num_inst)])
+    n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in np.arange(num_inst)])
     n_grid = np.arange(0, n_grid_max+10, 10)
     num_grids = len(n_grid)
-    obj_norm = pd.DataFrame(index=n_grid, columns=[f"norm_{i}" for i in np.arange(num_inst)], dtype=np.float16)
+    obj = []
+    for a in np.arange(num_algs):
+        obj.append(pd.DataFrame(index=n_grid, columns=np.arange(num_inst), dtype=np.float))
 
-    for i in np.arange(num_inst):
-        # normal
-        n_norm = np.zeros(num_grids)
-        theta_final = results[i]["theta"]
-        for n, theta in results[i]["inc_thetas_n"].items():
-            n_norm[n_grid > n] = theta/theta_final
-        obj_norm[f"norm_{i}"] = n_norm
+    for a in np.arange(num_algs):
+        for i in np.arange(num_inst):
+            # random
+            n_alg = np.zeros(num_grids)
+            theta_final = results[a][i]["theta"]
+            for n, theta in results[a][i]["inc_thetas_n"].items():
+                n_alg[n_grid > n] = theta/theta_final
+            obj[a][i] = n_alg
 
-    obj_norm = np.array(obj_norm)
-    obj_norm[obj_norm == 0] = np.nan
+        obj[a] = np.array(obj[a])
+        obj[a][obj[a] == 0] = np.nan
 
     sn.set_style("whitegrid")
     # plot results
-    avg_norm = np.quantile(obj_norm, 0.5, axis=1)
-    norm_10 = np.quantile(obj_norm, 0.1, axis=1)
-    norm_90 = np.quantile(obj_norm, 0.9, axis=1)
-    plt.fill_between(n_grid, norm_10, norm_90, color="k", alpha=0.5)
-    plt.plot(n_grid, avg_norm, "k", label="Random")
+    for a in np.arange(num_algs):
+        avg_random = np.quantile(obj[a], 0.5, axis=1)
+        random_10 = np.quantile(obj[a], 0.1, axis=1)
+        random_90 = np.quantile(obj[a], 0.9, axis=1)
+        plt.fill_between(n_grid, random_10, random_90, alpha=0.5)
+        plt.plot(n_grid, avg_random, label=alg_types[a])
 
     plt.xlabel("Nodes")
     plt.ylabel("Relative Objective")
-    plt.legend()
-    plt.savefig(f"plot_nodes_{problem_type}_random_K{K}_N{N}_{num_inst}")
+    plt.legend(loc=4)
+    plt.savefig(f"plot_nodes_{problem_type}_K{K}_N{N}_{num_inst}")
     plt.close()
 
 
-num_inst = 16
+num_inst = 128
 
-for problem_type in ["cb"]:
-    for K in [4]:
-        for N in [30]:
-            try:
-                plot_stuff(problem_type, K, N, num_inst)
-            except:
-                pass
+for K in [3, 4, 5]:
+    for N in [10]:
+        plot_stuff("cb", K, N, num_inst)

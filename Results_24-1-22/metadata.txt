@@ -1,0 +1,4 @@
+Experiments run on 24-1-2022
+- Not normalized training data, even though it says it had. Mistake here!
+- NN: f"CapitalBudgetingHigh/Data/Models/nn_class_cb_N10_K4_test_all_D8_W100.h5". So with K_train = 4. Accuracy is 0.82 of this.
+- On K = [2, 3, 4, 5]
