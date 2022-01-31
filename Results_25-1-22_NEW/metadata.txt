@@ -1,0 +1,9 @@
+Experiments run for capital budgeting on 25-1-22
+- on cluster for 112 instances
+- some weird stuff with 32 jobs on one node, so changed it up a bit.
+- NN model used: nn_class_cb_N10_K4_all_D8_W100.h5  NON BALANCED, accuracy of 0 is 0.97, of 1 around 0.4
+- N_test = N_train = 10
+- K_train = 4
+- max_level = [5, 10, 20]
+- on random, success prediction t=0.4, and success prediction without threshold
+- on K_test = [3, 4, 5]

@@ -11,7 +11,7 @@ import copy
 import time
 
 
-def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60, normalized=True):
+def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60, perc_label=0.05, normalized=False):
     # STORE NEW NEXT SCENARIO IN EMPTY NODE, THAT'S NEW BEGINNING!
     #   - attributes need to be stored for this
     # INITIAL RUN ON ALL CORES FOR INITIAL ROBUST SOLUTIONS
@@ -44,13 +44,13 @@ def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60, n
         return None
 
     # initialize on all cores, store init theta and tot scens
-    theta_init, tot_scens_init, theta_compete, rt_mean, max_depth = init_pass(K, env, tau)
+    theta_init, tot_scens_init, rt_mean, max_depth = init_pass(K, env, tau)
 
     att_index = att_index_maker(env, att_series)
     # CREATE SUBTREE
     input_data_dict, success_data_dict, tau_dict, _, covered_nodes, level = make_upper_tree(K, env, att_series,
                                                                                             tau, tau_att,
-                                                                                            theta_init, theta_compete,
+                                                                                            theta_init,
                                                                                             theta_start, zeta_init,
                                                                                             tot_scens_init, att_index,
                                                                                             max_depth=max_depth,
@@ -59,14 +59,13 @@ def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60, n
                                                                                             rt_mean=rt_mean)
 
     # RUN RANDOM RUNS FOR SUCCESS DATA
-    success_data_dict, num_start_nodes, time_per_node, num_runs_info = random_runs_from_nodes(K, env, theta_compete,
-                                                                                              tau_dict,
+    success_data_dict, num_start_nodes, time_per_node, num_runs_info = random_runs_from_nodes(K, env, tau_dict,
                                                                                               success_data_dict,
                                                                                               covered_nodes=covered_nodes,
                                                                                               level=level,
                                                                                               time_limit=time_limit,
+                                                                                              perc_label=perc_label,
                                                                                               normalized=normalized)
-
     # make input and success data final
     input_data = []
     success_data = []
@@ -197,11 +196,10 @@ def init_pass(K, env, tau):
 
     theta_init = np.mean([res[0] for res in init_results])
     tot_scens_init = np.mean([res[1] for res in init_results])
-    theta_compete = np.quantile([res[0] for res in init_results], 0.1)
     rt_mean = np.mean([res[2] for res in init_results])
     max_depth = np.quantile([res[1] for res in init_results], 0.9)
 
-    return theta_init, tot_scens_init, theta_compete, rt_mean, max_depth
+    return theta_init, tot_scens_init, rt_mean, max_depth
 
 
 def random_pass(K, env, tau, progress=False, time_per_node=None):
@@ -255,7 +253,7 @@ def random_pass(K, env, tau, progress=False, time_per_node=None):
         return theta
 
 
-def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_compete, theta_start, zeta_init,
+def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_start, zeta_init,
                    tot_scens_init, att_index, max_depth=5, x_static=None, time_limit=5*60, rt_mean=10):
     # Initialize
     # K-branch and bound algorithm
@@ -263,7 +261,7 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_compete,
 
     # decide on maximum number of start nodes
     thread_count = multiprocessing.cpu_count()
-    start_nodes_max = (time_limit*thread_count)/(20*rt_mean)
+    start_nodes_max = (time_limit*thread_count)/(10*rt_mean)
     # node information
     node_index = (0,)
 
@@ -311,15 +309,9 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_compete,
             scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
                                                       stat_model=stat_model, det_model=det_model)
 
-            # if theta higher than current robust theta
-            # don't prune because we still want to have a full data set
-            if theta - theta_compete > -1e-8:
-                success_data_dict[len(new_node_index)][new_node_index] = 0
-                continue
-
             # check if robust
             if zeta < 1e-04:
-                success_data_dict[len(new_node_index)][new_node_index] = 1
+                success_data_dict[len(new_node_index)][new_node_index] = theta
                 continue
 
             # STATE DATA
@@ -383,8 +375,8 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_compete,
     return input_data_dict, success_data_dict, tau_dict, runtime, covered_nodes, level
 
 
-def random_runs_from_nodes(K, env, theta_compete, tau_dict, success_data_dict, covered_nodes, level, time_limit=5*60,
-                           normalized=True):
+def random_runs_from_nodes(K, env, tau_dict, success_data_dict, covered_nodes, level, time_limit=5*60,
+                           perc_label=0.05, normalized=False):
     # find starting nodes
     starting_nodes = []
     for node in covered_nodes[level]:
@@ -401,14 +393,28 @@ def random_runs_from_nodes(K, env, theta_compete, tau_dict, success_data_dict, c
     thetas = Parallel(n_jobs=-1)(delayed(starting_nodes_pass)(K, env, tau_dict[n], time_per_node)
                                      for n in starting_nodes)
 
+    # find best perc_label percent.
+    all_thetas = np.array([t for t_list in thetas for t in t_list])
+    theta_compete = np.quantile(all_thetas, perc_label)
+    # for all robust nodes, check if theta < theta_perc. if so, it's 1
+    for level, level_nodes in success_data_dict.items():
+        for node, theta in level_nodes.items():
+            if theta < theta_compete:
+                success_data_dict[level][node] = 1
+            else:
+                success_data_dict[level][node] = 0
+
     num_runs = []
     for i, node in enumerate(starting_nodes):
         num_runs.append(len(thetas[i]))
-        # success predictions of starting nodes
-        success_data_dict[level][node] = np.sum(np.array(thetas[i]) < theta_compete)/len(thetas[i])
+        if len(thetas[i]):
+            # success predictions of starting nodes
+            success_data_dict[level][node] = np.sum(np.array(thetas[i]) < theta_compete)/len(thetas[i])
+        else:
+            success_data_dict[level][node] = 0
 
     # get success predictions of other nodes in upper tree
-    success_data_dict = finish_success(K, success_data_dict, covered_nodes, level, normalized)
+    success_data_dict = finish_success(K, success_data_dict, covered_nodes, level, normalized=normalized)
 
     num_runs_info = [np.min(num_runs), np.mean(num_runs), np.max(num_runs)]
     return success_data_dict, len(starting_nodes), time_per_node, num_runs_info
@@ -417,7 +423,7 @@ def random_runs_from_nodes(K, env, theta_compete, tau_dict, success_data_dict, c
 def starting_nodes_pass(K, env, tau, time_per_node):
     start_time = time.time()
     results = []
-    while time.time() - start_time < time_per_node:
+    while len(results) < 50 and time.time() - start_time < time_per_node:
         new_res = random_pass(K, env, tau, time_per_node=time_per_node)
         if new_res is None:
             continue
@@ -425,7 +431,7 @@ def starting_nodes_pass(K, env, tau, time_per_node):
     return results
 
 
-def finish_success(K, success_data_dict, covered_nodes, max_depth, normalized=True):
+def finish_success(K, success_data_dict, covered_nodes, max_depth, normalized=False):
     all_levels = np.arange(2, max_depth)[::-1]
     for level in all_levels:
         for parent in covered_nodes[level]:
@@ -440,9 +446,10 @@ def finish_success(K, success_data_dict, covered_nodes, max_depth, normalized=Tr
                 suc_prob += np.prod([prob_matrix[k, c[k]] for k in np.arange(K)])
             success_data_dict[level][parent] = suc_prob
 
+    success_data_dict_final = {}
+
     if normalized:
         # normalize per parent-child subtree
-        success_data_dict_final = {}
         all_levels = np.arange(1, max_depth)
         for level in all_levels:
             for parent in covered_nodes[level]:
@@ -459,7 +466,6 @@ def finish_success(K, success_data_dict, covered_nodes, max_depth, normalized=Tr
                     for k in np.arange(K):
                         success_data_dict_final[parent + (k,)] = child_values[k]/np.sum(child_values)
     else:
-        success_data_dict_final = {}
         for level, nodes in success_data_dict.items():
             for node, label in nodes.items():
                 success_data_dict_final[node] = label

@@ -1,5 +1,6 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from xgboost import XGBRFClassifier
 
@@ -7,7 +8,6 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv1D, LSTM
 
 import matplotlib.pyplot as plt
-import autokeras as ak
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -16,11 +16,12 @@ import time
 
 
 # REGRESSION
-def train_suc_pred_rf_regr(X_train, Y_train, X_val, Y_val, features, problem_type="test", instances=1000):
-    model_name = f"../CapitalBudgetingHigh/Data/Models/rf_regr_{problem_type}.joblib"
+def train_suc_pred_rf_regr(X, Y, features, problem_type="test", instances=1000, save_map="Results"):
+    model_name = f"../{save_map}/Models/rf_regr_{problem_type}.joblib"
 
-    X_train, Y_train, X_val, Y_val, before = clean_data(X_train, Y_train, X_val, Y_val)
+    X, Y, before = clean_data(X, Y)
 
+    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.01)
     start_time = time.time()
     rf = RandomForestRegressor()
     rf.fit(X_train, Y_train)
@@ -37,14 +38,14 @@ def train_suc_pred_rf_regr(X_train, Y_train, X_val, Y_val, features, problem_typ
 
     # save
     joblib.dump(rf, model_name)
-    feature_importance.to_pickle(f"../CapitalBudgetingHigh/Data/Models/Info/rf_regr_feat_imp_{problem_type}.pickle")
+    feature_importance.to_pickle(f"../{save_map}/Models/Info/rf_regr_feat_imp_{problem_type}.pickle")
 
     # save model training info
     model_info = pd.Series([instances, len(X_train), score_rf, *before, time.time() - start_time],
                            index=["instances", "datapoints", "Rsquared",
                                   "0-0.1", "0.1-0.2", "0.2-0.3", "0.3-0.4", "0.4-0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9",
                                   "0.9-1", "runtime"])
-    model_info.to_pickle(f"../CapitalBudgetingHigh/Data/Models/Info/rf_regr_info_{problem_type}.pickle")
+    model_info.to_pickle(f"../{save_map}/Models/Info/rf_regr_info_{problem_type}.pickle")
 
     return score_rf
 
@@ -104,12 +105,14 @@ def train_suc_pred_nn_regr(X_train, Y_train, X_val, Y_val, depth=5, width=100, m
 
 
 # CLASSIFICATION
-def train_suc_pred_nn_class(X_train, Y_train, X_val, Y_val, depth=8, width=100, max_epochs=200, patience_epochs=20,
-                      batch_size=64, problem_type="test", instances=1000, balanced=True):
-    model_name = f"../CapitalBudgetingHigh/Data/Models/nn_class_{problem_type}_D{depth}_W{width}.h5"
+def train_suc_pred_nn_class(X, Y, depth=8, width=100, max_epochs=200, patience_epochs=20,
+                      batch_size=64, problem_type="test", instances=1000, balanced=True, class_thresh=False,
+                            save_map="Results"):
+    model_name = f"../{save_map}/Models/nn_class_{problem_type}_D{depth}_W{width}.h5"
 
-    X_train, Y_train, X_val, Y_val, before, after = clean_data(X_train, Y_train, X_val, Y_val, classification=True,
-                                                               balanced=balanced)
+    X_train, Y_train, X_val, Y_val, before, after = clean_data(X, Y, classification=True, class_thresh=class_thresh)
+
+    X_train, Y_train, X_val, Y_val = train_test_split(X, Y, stratify=Y)
 
     # NN MODEL
     start_time = time.time()
@@ -143,7 +146,7 @@ def train_suc_pred_nn_class(X_train, Y_train, X_val, Y_val, depth=8, width=100, 
     plt.plot(history.history['val_loss'], label='validation loss')
     plt.legend()
 
-    plt.savefig(f"../CapitalBudgetingHigh/Data/Models/Info/nn_class_plot_{problem_type}_D{depth}_W{width}.png")
+    plt.savefig(f"../{save_map}/Models/Info/nn_class_plot_{problem_type}_D{depth}_W{width}.png")
     plt.close()
 
     # evaluation
@@ -165,35 +168,18 @@ def train_suc_pred_nn_class(X_train, Y_train, X_val, Y_val, depth=8, width=100, 
                            index=["instances", "datapoints", "accuracy_all", "accuracy_0", "accuracy_1", "epochs", "D", "W",
                                   "0-0.1", "0.1-0.2", "0.2-0.3", "0.3-0.4", "0.4-0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9",
                                   "0.9-1", "0", "1", "runtime"])
-    model_info.to_pickle(f"../CapitalBudgetingHigh/Data/Models/Info/nn_class_info_{problem_type}_D{depth}_W{width}.pickle")
+    model_info.to_pickle(f"../{save_map}/Models/Info/nn_class_info_{problem_type}_D{depth}_W{width}.pickle")
 
     return score[1]
 
 
-def auto_nn_class(X_train, Y_train, X_val, Y_val, max_epochs=20, trials=10, problem_type="test"):
-    model_name = f"../CapitalBudgetingHigh/Data/Models/nn_auto_regr_{problem_type}.h5"
+def train_suc_pred_rf_class(X, Y, features, problem_type="test", estimators=100, instances=1000,
+                            save_map="Results", class_thresh=False):
+    model_name = f"../{save_map}/Models/rf_class_{problem_type}.joblib"
 
-    # clean data
-    X_train, Y_train, X_val, Y_val = clean_data(X_train, Y_train, X_val, Y_val, classification=True)
+    X, Y, before, after = clean_data(X, Y, classification=True, class_thresh=class_thresh)
 
-    # initialize the structured data regressor
-    reg = ak.StructuredDataClassifier(overwrite=True, max_trials=trials)
-
-    # train data
-    reg.fit(X_train, Y_train, epochs=max_epochs)
-
-    score = reg.evaluate(X_val, Y_val)
-
-    # save model
-    reg.export_model().save(model_name)
-
-    return score
-
-
-def train_suc_pred_rf_class(X_train, Y_train, X_val, Y_val, features, problem_type="test", estimators=100, instances=1000):
-    model_name = f"../CapitalBudgetingHigh/Data/Models/rf_class_{problem_type}.joblib"
-
-    X_train, Y_train, X_val, Y_val, before, after = clean_data(X_train, Y_train, X_val, Y_val, classification=True, balanced=True)
+    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, stratify=Y, test_size=0.01)
 
     # MODEL
     start_time = time.time()
@@ -201,9 +187,15 @@ def train_suc_pred_rf_class(X_train, Y_train, X_val, Y_val, features, problem_ty
     rf.fit(X_train, Y_train)
 
     # evaluation
-    score_rf = rf.score(X_val, Y_val)
+    score = rf.score(X_val, Y_val)
+    data_0_index = Y_val[Y_val == 0].index
+    type_1 = 1 - rf.score(X_val.loc[data_0_index], Y_val[data_0_index])
+    data_1_index = Y_val[Y_val == 1].index
+    type_2 = 1 - rf.score(X_val.loc[data_1_index], Y_val[data_1_index])
 
-    print(f"\nRF classification validation accuracy = {score_rf}")
+    print(f"RF classification validation accuracy = {score}")
+    print(f"RF classification validation type I error = {type_1}")
+    print(f"RF classification validation type II error = {type_2}")
 
     # feature importance
     feature_importance = pd.Series(rf.feature_importances_, index=features)
@@ -212,15 +204,15 @@ def train_suc_pred_rf_class(X_train, Y_train, X_val, Y_val, features, problem_ty
 
     # save
     joblib.dump(rf, model_name)
-    feature_importance.to_pickle(f"../CapitalBudgetingHigh/Data/Models/Info/rf_class_feat_imp_{problem_type}.pickle")
+    feature_importance.to_pickle(f"../{save_map}/Models/Info/rf_class_feat_imp_{problem_type}.pickle")
 
-    model_info = pd.Series([instances, len(X_train), score_rf, estimators, *before, *after, time.time() - start_time],
-                           index=["instances", "datapoints", "accuracy", "estimators",
+    model_info = pd.Series([instances, len(X_train), class_thresh, score, type_1, type_2, estimators, *before, *after, time.time() - start_time],
+                           index=["instances", "datapoints", "class_threshold", "accuracy", "type_1", "type_2", "estimators",
                                   "0-0.1", "0.1-0.2", "0.2-0.3", "0.3-0.4", "0.4-0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9",
                                   "0.9-1", "0", "1", "runtime"])
-    model_info.to_pickle(f"../CapitalBudgetingHigh/Data/Models/Info/rf_class_info_{problem_type}.pickle")
+    model_info.to_pickle(f"../{save_map}/Models/Info/rf_class_info_{problem_type}.pickle")
 
-    return score_rf
+    return score
 
 
 def train_suc_pred_xgboost_class(X_train, Y_train, X_val, Y_val, problem_type="test", instances=1000):
@@ -249,53 +241,47 @@ def train_suc_pred_xgboost_class(X_train, Y_train, X_val, Y_val, problem_type="t
     return accuracy
 
 
-def clean_data(X_train, Y_train, X_val, Y_val, classification=False, balanced=False):
+def clean_data(X, Y, classification=False, class_thresh=False):
     # clean train data
-    X_train = X_train.replace([np.inf, -np.inf], np.nan).dropna(how="all")
-    Y_train = Y_train.replace([np.inf, -np.inf], np.nan).dropna()
+    X = X.replace([np.inf, -np.inf], np.nan).dropna(how="all")
+    Y = Y.replace([np.inf, -np.inf], np.nan).dropna()
 
     # find similar indices
-    same_indices = X_train.index.intersection(Y_train.index)
-    X_train = X_train.loc[same_indices]
-    Y_train = Y_train[same_indices]
-
-    # clean train data
-    X_val = X_val.replace([np.inf, -np.inf], np.nan).dropna(how="all")
-    Y_val = Y_val.replace([np.inf, -np.inf], np.nan).dropna()
-
-    # find similar indices
-    same_indices = X_val.index.intersection(Y_val.index)
-    X_val = X_val.loc[same_indices]
-    Y_val = Y_val[same_indices]
+    same_indices = X.index.intersection(Y.index)
+    X = X.loc[same_indices]
+    Y = Y[same_indices]
 
     # check the classes
     before = []
     for p in np.arange(0.1, 1.1, 0.1):
-        perc = ((Y_train >= p-0.1) & (Y_train <= p)).sum()/len(Y_train)
+        perc = ((Y >= p-0.1) & (Y <= p)).sum()/len(Y)
         before.append(perc)
+    print(before)
 
     if classification:
-        # change Y to integers
-        Y_train = Y_train.astype(int)
-        Y_val = Y_val.astype(int)
+        if class_thresh:
+            Y[Y < class_thresh] = 0
+            Y[Y >= class_thresh] = 1
+        else:
+            # change Y to integers
+            Y = Y.astype(int)
 
-        if balanced:
-            X_train["class"] = Y_train
-            g = X_train.groupby('class')
-            g = pd.DataFrame(g.apply(lambda x: x.sample(int(g.size().mean()), replace=True).reset_index(drop=False)))
-            X_train = g
-            X_new_index = np.array([g.level_0.to_numpy(), g.level_1.to_numpy()]).transpose()
-            X_train.index = [tuple(l) for l in X_new_index]
-            # X_train.index = g["index"]
-            X_train.drop(["level_0", "level_1", "class"], axis=1, inplace=True)
-            Y_train = Y_train[X_train.index]
+        # if balanced:
+        #     X_train["class"] = Y_train
+        #     g = X_train.groupby('class')
+        #     g = pd.DataFrame(g.apply(lambda x: x.sample(int(g.size().mean()), replace=True).reset_index(drop=False)))
+        #     X_train = g
+        #     X_new_index = np.array([g.level_0.to_numpy(), g.level_1.to_numpy()]).transpose()
+        #     X_train.index = [tuple(l) for l in X_new_index]
+        #     X_train.drop(["level_0", "level_1", "class"], axis=1, inplace=True)
+        #     Y_train = Y_train[X_train.index]
 
         after = []
         for p in np.arange(0, 2):
-            perc = (Y_train == int(p)).sum() / len(Y_train)
+            perc = (Y == int(p)).sum() / len(Y)
             after.append(perc)
+        print(after)
+        return X, Y, before, after
 
-        return X_train, Y_train, X_val, Y_val, before, after
-
-    return X_train, Y_train, X_val, Y_val, before
+    return X, Y, before
 

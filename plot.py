@@ -5,31 +5,37 @@ import numpy as np
 import pickle
 
 
-def plot_stuff(problem_type, K, N, num_inst):
-    results = [{}]
-    alg_types = ["Random"]
+def plot_stuff(problem_type, K, N, num_inst, level=5, thresh=False):
+    results = [{}, {}]
+    alg_types = ["Random", "Success Prediction"]
     num_algs = len(results)
+    insts = []
     for i in np.arange(num_inst):
+        try:
+            with open(f"Results_25-1-22_NEW/Decisions/inst_results/final_results_cb_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+                results[0][i] = pickle.load(handle)
 
-        with open(f"Results_25-1-22/Decisions/inst_results/final_results_cb_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
-            results[0][i] = pickle.load(handle)
-        # with open(f"Results_24-1-22_p2/Decisions/inst_results/final_results_cb_suc_pred_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
-        #     results[1][i] = pickle.load(handle)
-        # with open(f"CapitalBudgetingHigh/Data/Results/Decisions/inst_results/final_results_cb_suc_pred_nn_no_thresh_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
-        #     results[2][i] = pickle.load(handle)
-
+            if thresh:
+                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
+                    results[1][i] = pickle.load(handle)
+            else:
+                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_nt_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
+                    results[1][i] = pickle.load(handle)
+            insts.append(i)
+        except:
+            continue
     # PLOT RESULTS OVER RUNTIME
     t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 30*60+15, 15)])
     num_grids = len(t_grid)
     obj = []
     for a in np.arange(num_algs):
-        obj.append(pd.DataFrame(index=t_grid, columns=np.arange(num_inst), dtype=np.float))
+        obj.append(pd.DataFrame(index=t_grid, columns=insts, dtype=np.float))
 
     for a in np.arange(num_algs):
-        for i in np.arange(num_inst):
+        for i in insts:
             # random
+            theta_final = results[0][i]["theta"]
             t_alg = np.zeros(num_grids)
-            theta_final = results[a][i]["theta"]
             for t, theta in results[a][i]["inc_thetas_t"].items():
                 t_alg[t_grid > t] = theta/theta_final
             obj[a][i] = t_alg
@@ -49,22 +55,25 @@ def plot_stuff(problem_type, K, N, num_inst):
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Relative Objective")
     plt.legend(loc=4)
-    plt.savefig(f"plot_runtime_{problem_type}_K{K}_N{N}_{num_inst}")
+    if thresh:
+        plt.savefig(f"plot_runtime_{problem_type}_K{K}_N{N}_L{level}_{len(insts)}")
+    else:
+        plt.savefig(f"plot_runtime_{problem_type}_nt_K{K}_N{N}_L{level}_{len(insts)}")
     plt.close()
 
     # PLOT RESULTS OVER NODES
-    n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in np.arange(num_inst)])
+    n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in insts])
     n_grid = np.arange(0, n_grid_max+10, 10)
     num_grids = len(n_grid)
     obj = []
     for a in np.arange(num_algs):
-        obj.append(pd.DataFrame(index=n_grid, columns=np.arange(num_inst), dtype=np.float))
+        obj.append(pd.DataFrame(index=n_grid, columns=insts, dtype=np.float))
 
     for a in np.arange(num_algs):
-        for i in np.arange(num_inst):
+        for i in insts:
             # random
             n_alg = np.zeros(num_grids)
-            theta_final = results[a][i]["theta"]
+            theta_final = results[0][i]["theta"]
             for n, theta in results[a][i]["inc_thetas_n"].items():
                 n_alg[n_grid > n] = theta/theta_final
             obj[a][i] = n_alg
@@ -84,12 +93,43 @@ def plot_stuff(problem_type, K, N, num_inst):
     plt.xlabel("Nodes")
     plt.ylabel("Relative Objective")
     plt.legend(loc=4)
-    plt.savefig(f"plot_nodes_{problem_type}_K{K}_N{N}_{num_inst}")
+    if thresh:
+        plt.savefig(f"plot_nodes_{problem_type}_K{K}_N{N}_L{level}_{len(insts)}")
+    else:
+        plt.savefig(f"plot_nodes_{problem_type}_nt_K{K}_N{N}_L{level}_{len(insts)}")
     plt.close()
 
 
-num_inst = 128
+def show_stuff(N, K, num_inst, level, thresh=False):
+    results = [{}, {}]
+    alg_types = ["Random", "Success Prediction"]
+    num_algs = len(results)
+    insts = []
+    for i in np.arange(num_inst):
+        try:
+            with open(f"Results_25-1-22_NEW/Decisions/inst_results/final_results_cb_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+                results[0][i] = pickle.load(handle)
 
-for K in [3, 4, 5]:
-    for N in [10]:
-        plot_stuff("cb", K, N, num_inst)
+            if thresh:
+                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
+                    results[1][i] = pickle.load(handle)
+            else:
+                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_nt_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
+                    results[1][i] = pickle.load(handle)
+            insts.append(i)
+        except:
+            continue
+    for alg, alg_results in enumerate(results):
+        optimal = np.array([res["runtime"] < 60*30 for res in alg_results.values()]).mean()
+        print(f"{alg_types[alg]}: optimal within time limit = {optimal}")
+
+
+num_inst = 112
+
+thresh = False
+for max_level in [20, 30, 50]:
+    for K in [3, 4, 5]:
+        print(f"K = {K}, L = {max_level}")
+        for N in [10]:
+            show_stuff(N, K, num_inst, max_level)
+            plot_stuff("cb", K, N, num_inst, max_level, thresh)
