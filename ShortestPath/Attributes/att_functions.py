@@ -137,7 +137,7 @@ def const_to_const_fun(K, scen, env, tau):
             xi_vec_0 = [(1 + xi[a]/2)*env.distances_array[a] for a in np.arange(env.num_arcs)]
             similarity = (sum([xi_vec_0[a]*scen_vec_0[a] for a in np.arange(env.num_arcs)])) / \
                          ((np.sqrt(sum(xi_vec_0[a] ** 2 for a in np.arange(env.num_arcs)))) *
-                          (np.sqrt(sum(xi_vec_0[a] ** 2 for a in np.arange(env.num_arcs)))))
+                          (np.sqrt(sum(scen_vec_0[a] ** 2 for a in np.arange(env.num_arcs)))))
             cos_tmp.append(similarity)
 
         # select cos with most similarity, so max cos

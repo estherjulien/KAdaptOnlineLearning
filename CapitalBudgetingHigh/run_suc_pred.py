@@ -11,7 +11,7 @@ if __name__ == "__main__":
     thresh = int(sys.argv[5])
 
     # load environment
-    with open(f"CapitalBudgetingHigh/Data/Instances/inst_results/cb_env_N{N}_{i}.pickle", "rb") as handle:
+    with open(f"CapitalBudgetingHigh/Data/Instances/inst_results/cb_test_env_N{N}_{i}.pickle", "rb") as handle:
         env = pickle.load(handle)
 
     success_model_name = f"CapitalBudgetingHigh/Data/Models/rf_class_cb_p5_N10_K4_ct70_all.joblib"

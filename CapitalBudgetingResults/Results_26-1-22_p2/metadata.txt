@@ -1,0 +1,7 @@
+Experiments run for capital budgeting on 27-1-22
+- New training data with up to 5 mins for each instance
+    DOESNT RESULT IN LARGE ENOUGH LEVELS
+    NOW 10 MINS, also doesn't give many more layers
+- K_train = [2, 3, 4]
+
+NOW: NEW THRESHOLD ON TRAINDATAM2 TO BALANCE DATA BEFOREHAND

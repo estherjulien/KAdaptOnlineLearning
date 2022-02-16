@@ -17,6 +17,6 @@ if __name__ == "__main__":
             pickle.dump(env, handle)
 
     # save all
-    with open(f"CapitalBudgetingHigh/Data/Instances/cb_env_list_N{N}_{num_instances}.pickle", "wb") as handle:
+    with open(f"CapitalBudgetingHigh/Data/Instances/cb_test_env_list_N{N}_{num_instances}.pickle", "wb") as handle:
         pickle.dump(env_list, handle)
 

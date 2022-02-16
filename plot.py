@@ -12,20 +12,16 @@ def plot_stuff(problem_type, K, N, num_inst, level=5, thresh=False):
     insts = []
     for i in np.arange(num_inst):
         try:
-            with open(f"Results_25-1-22_NEW/Decisions/inst_results/final_results_cb_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+            with open(f"ShortestPathResults/Data/Results/Decisions/inst_results/final_results_sp_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
                 results[0][i] = pickle.load(handle)
 
-            if thresh:
-                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
-                    results[1][i] = pickle.load(handle)
-            else:
-                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_nt_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
-                    results[1][i] = pickle.load(handle)
+            with open(f"ShortestPathResults/Data/Results/Decisions/inst_results/final_results_sp_suc_pred_rf_p5_nt_N{N}_K{K}_I100_L{level}_inst{i}.pickle", "rb") as handle:
+                results[1][i] = pickle.load(handle)
             insts.append(i)
         except:
             continue
     # PLOT RESULTS OVER RUNTIME
-    t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 30*60+15, 15)])
+    t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 60*60+15, 15)])
     num_grids = len(t_grid)
     obj = []
     for a in np.arange(num_algs):
@@ -54,7 +50,7 @@ def plot_stuff(problem_type, K, N, num_inst, level=5, thresh=False):
 
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Relative Objective")
-    plt.legend(loc=4)
+    plt.legend(loc=1)
     if thresh:
         plt.savefig(f"plot_runtime_{problem_type}_K{K}_N{N}_L{level}_{len(insts)}")
     else:
@@ -92,7 +88,7 @@ def plot_stuff(problem_type, K, N, num_inst, level=5, thresh=False):
 
     plt.xlabel("Nodes")
     plt.ylabel("Relative Objective")
-    plt.legend(loc=4)
+    plt.legend(loc=1)
     if thresh:
         plt.savefig(f"plot_nodes_{problem_type}_K{K}_N{N}_L{level}_{len(insts)}")
     else:
@@ -124,12 +120,11 @@ def show_stuff(N, K, num_inst, level, thresh=False):
         print(f"{alg_types[alg]}: optimal within time limit = {optimal}")
 
 
-num_inst = 112
+num_inst = 60
 
 thresh = False
-for max_level in [20, 30, 50]:
-    for K in [3, 4, 5]:
+for max_level in [30]:
+    for K in [3, 4, 5, 6]:
         print(f"K = {K}, L = {max_level}")
-        for N in [10]:
-            show_stuff(N, K, num_inst, max_level)
-            plot_stuff("cb", K, N, num_inst, max_level, thresh)
+        for N in [100]:
+            plot_stuff("sp", K, N, num_inst, max_level, thresh)

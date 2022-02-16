@@ -5,33 +5,35 @@ import pickle
 N = 10
 
 class_perc = 5
-Results_day = f"Results_27-1-22"
-for K in [2, 3, 4]:
-    print(f"K = {K}")
-    with open(f"../{Results_day}/Traindata/input_cb_p{class_perc}_N{N}_K{K}.pickle", "rb") as handle:
-        X = pickle.load(handle)
+Results_day = f"CapitalBudgetingResults/ModelResults"
+for I in [100, 200, 500, 1000]:
+    for K in [2, 3, 4]:
+        with open(f"../{Results_day}/TrainData/input_cb_p{class_perc}_N{N}_K{K}_I{I}.pickle", "rb") as handle:
+            X = pickle.load(handle)
 
-    with open(f"../{Results_day}/Traindata/output_cb_p{class_perc}_N{N}_K{K}.pickle", "rb") as handle:
-        Y = pickle.load(handle)
+        with open(f"../{Results_day}/TrainData/output_cb_p{class_perc}_N{N}_K{K}_I{I}.pickle", "rb") as handle:
+            Y = pickle.load(handle)
 
-    att_series = ["coords", "obj_stat", "y_stat", "obj_det", "x_det", "y_det", "slack", "const_to_z_dist",
-                  "const_to_const_dist"]
+        att_series = ["coords", "obj_stat", "y_stat", "obj_det", "x_det", "y_det", "slack", "const_to_z_dist",
+                      "const_to_const_dist"]
+        # att_series = ["coords", "obj_det", "y_det", "slack", "const_to_z_dist",
+        #               "const_to_const_dist"]
 
-    features = ["theta_node", "theta_pre", "zeta_node", "zeta_pre", "depth", *att_series]
+        features = ["theta_node", "theta_pre", "zeta_node", "zeta_pre", "depth", *att_series]
 
-    # DIFFERENT MODELS
+        # DIFFERENT MODELS
 
-    # CLASSIFICATION
-    for ct in [0.4, 0.6, 0.7, 0.8]:
-        print(f"Class threshold = {ct}")
-        if ct:
-            problem_type = f"cb_p{class_perc}_N{N}_K{K}_ct{int(ct*100)}_all"
-        else:
-            problem_type = f"cb_p{class_perc}_N{N}_K{K}_all"
-        train_suc_pred_rf_class(X, Y, features, problem_type=problem_type, save_map=Results_day, class_thresh=ct)
+        # CLASSIFICATION
+        for ct in [None, 0.3, 0.7]:
+            print(f"I = {I}, K = {K}, ct = {ct}")
+            if ct:
+                problem_type = f"cb_p{class_perc}_N{N}_K{K}_I{I}_ct{int(ct*100)}_all"
+            else:
+                problem_type = f"cb_p{class_perc}_N{N}_K{K}_I{I}_all"
+            train_suc_pred_rf_class(X, Y, features, problem_type=problem_type, save_map=Results_day, class_thresh=ct)
     # REGRESSION
     # print("Regression")
-    # problem_type = f"cb_p{class_perc}_N{N}_K{K}_all"
+    # problem_type = f"sp_p{class_perc}_N{N}_K{K}_all"
     # train_suc_pred_rf_regr(X, Y, features, problem_type=problem_type, save_map=Results_day)
 
     # train_suc_pred_nn_regr(X_train, Y_train, X_val, Y_val, problem_type=problem_type, width=100, depth=5)
