@@ -36,42 +36,42 @@ class_perc = 5
 #         metadata_models[K].loc[len(metadata_models[K])] = pd.read_pickle(
 #             f"CapitalBudgetingResults/Results_27-1-22/Models/Info/rf_class_info_{problem_type}.pickle")
 
-# todays_map = "CapitalBudgetingResults/ModelResults"
-# for I in [100, 200, 500, 1000]:
-#     for K in [2, 3, 4]:
-#         for N in [10]:
-#             finished_instances[(K, N)] = 0
-#             missing_instances[(K, N)] = []
-#             save_name = f"cb_p{class_perc}_N{N}_K{K}_I{I}"
-#
-#             for i in np.arange(I):
-#                 try:
-#                     with open(f"{todays_map}/TrainData/inst_results/data_results_cb_p{class_perc}_N{N}_K{K}_{i}.pickle", "rb") as handle:
-#                         new_data = pickle.load(handle)
-#                     with open(f"{todays_map}/RunInfo/run_info_cb_p{class_perc}_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
-#                         new_info = pickle.load(handle)
-#                     finished_instances[(K, N)] += 1
-#                 except:
-#                     missing_instances[(K, N)].append(i)
-#                     continue
-#
-#                 X = pd.DataFrame(new_data["X"])
-#                 X.index = pd.MultiIndex.from_product([[i], X.index])
-#                 Y = pd.Series(new_data["Y"])
-#                 Y.index = pd.MultiIndex.from_product([[i], Y.index])
-#
-#                 try:
-#                     data[(K, N, I)] = pd.concat([data[(K, N, I)], X])
-#                     labels[(K, N, I)] = pd.concat([labels[(K, N, I)], Y])
-#                     info[(K, N, I)].loc[i] = new_info
-#                 except:
-#                     data[(K, N, I)] = X
-#                     labels[(K, N, I)] = Y
-#                     info[(K, N, I)] = pd.DataFrame(columns=new_info.index)
-#                     info[(K, N, I)].loc[i] = new_info
-#             print(f"K = {K}, N = {N}, I = {I}")
-#             print(labels[(K, N, I)].describe())
-#
-#             data[(K, N, I)].to_pickle(f"{todays_map}/TrainData/input_{save_name}.pickle")
-#             labels[(K, N, I)].to_pickle(f"{todays_map}/TrainData/output_{save_name}.pickle")
-#             info[(K, N, I)].to_pickle(f"{todays_map}/TrainData/metadata_{save_name}.pickle")
+todays_map = "ShortestPathResults/Data"
+for I in [100, 200, 500]:
+    for K in [2, 3, 4]:
+        for N in [50]:
+            finished_instances[(I, K, N)] = 0
+            missing_instances[(I, K, N)] = []
+            save_name = f"sp_p{class_perc}_N{N}_K{K}_I{I}"
+
+            for i in np.arange(I):
+                try:
+                    with open(f"{todays_map}/Results/TrainData/inst_results/data_results_sp_p{class_perc}_N{N}_K{K}_{i}.pickle", "rb") as handle:
+                        new_data = pickle.load(handle)
+                    with open(f"{todays_map}/RunInfo/run_info_sp_p{class_perc}_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+                        new_info = pickle.load(handle)
+                    finished_instances[(I, K, N)] += 1
+                except:
+                    missing_instances[(I, K, N)].append(i)
+                    continue
+
+                X = pd.DataFrame(new_data["X"])
+                X.index = pd.MultiIndex.from_product([[i], X.index])
+                Y = pd.Series(new_data["Y"])
+                Y.index = pd.MultiIndex.from_product([[i], Y.index])
+
+                try:
+                    data[(K, N, I)] = pd.concat([data[(K, N, I)], X])
+                    labels[(K, N, I)] = pd.concat([labels[(K, N, I)], Y])
+                    info[(K, N, I)].loc[i] = new_info
+                except:
+                    data[(K, N, I)] = X
+                    labels[(K, N, I)] = Y
+                    info[(K, N, I)] = pd.DataFrame(columns=new_info.index)
+                    info[(K, N, I)].loc[i] = new_info
+            print(f"K = {K}, N = {N}, I = {I}")
+            print(labels[(K, N, I)].describe())
+
+            data[(K, N, I)].to_pickle(f"{todays_map}/Results/TrainData/input_{save_name}.pickle")
+            labels[(K, N, I)].to_pickle(f"{todays_map}/Results/TrainData/output_{save_name}.pickle")
+            info[(K, N, I)].to_pickle(f"{todays_map}/Results/TrainData/metadata_{save_name}.pickle")

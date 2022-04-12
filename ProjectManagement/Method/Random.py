@@ -1,5 +1,4 @@
-# CHANGE THIS FOR NEW PROBLEMS
-from ClusterCapitalBudgeting.ProblemFunctions.functions_milp import *
+from ProblemFunctions.functions_milp import *
 
 from datetime import datetime
 import numpy as np
@@ -8,21 +7,15 @@ import copy
 import time
 
 
-def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
+def algorithm(K, env, time_limit=30*60, print_info=True, problem_type="test"):
     # Initialize
     iteration = 0
     start_time = time.time()
     # initialization for saving stuff
     inc_thetas_t = dict()
     inc_thetas_n = dict()
-    inc_tau = dict()
-    inc_x = dict()
-    inc_y = dict()
     prune_count = 0
-    inc_tot_nodes = dict()
     tot_nodes = 0
-    inc_tot_nodes[0] = 0
-    prev_save_time = 0
     mp_time = 0
     sp_time = 0
     # initialization of lower and upper bounds
@@ -89,12 +82,8 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
                 pass
 
             theta_i, x_i, y_i = (copy.deepcopy(theta), copy.deepcopy(x), copy.deepcopy(y))
-            tau_i = copy.deepcopy(tau)
             inc_thetas_t[time.time() - start_time] = theta_i
             inc_thetas_n[tot_nodes] = theta_i
-            inc_tau[time.time() - start_time] = tau_i
-            inc_x[time.time() - start_time] = x_i
-            inc_y[time.time() - start_time] = y_i
             prune_count += 1
             new_model = True
             continue
@@ -123,41 +112,22 @@ def algorithm(K, env, time_limit=20*60, print_info=True, problem_type="test"):
             placement_tmp[k].append(new_xi_num)
             N_set.append(placement_tmp)
 
-        # save every 10 minutes
-        if time.time() - start_time - prev_save_time > 10*60:
-            prev_save_time = time.time() - start_time
-            # also save inc_tot_nodes
-            inc_tot_nodes[time.time() - start_time] = tot_nodes
-            tmp_results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t,
-                           "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
-                           "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
-                           "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all}
-            with open("Data/Results/Decisions/inst_results/tmp_results_{}_inst{}.pickle".format(problem_type, env.inst_num), "wb") as handle:
-                pickle.dump(tmp_results, handle)
         iteration += 1
     # termination results
     runtime = time.time() - start_time
     inc_thetas_t[time.time() - start_time] = theta_i
     inc_thetas_n[tot_nodes] = theta_i
-    inc_tau[runtime] = tau_i
-    inc_x[runtime] = x_i
-    inc_y[runtime] = y_i
-    inc_tot_nodes[runtime] = tot_nodes
 
     now = datetime.now().time()
-    print("Instance R {}, completed at {}, solved in {} minutes".format(env.inst_num, now, runtime/60))
-    results = {"theta": theta_i, "x": x_i, "y": y_i, "tau": tau_i,  "inc_thetas_t": inc_thetas_t,
-               "inc_thetas_n": inc_thetas_n, "inc_x": inc_x, "inc_y": inc_y, "inc_tau": inc_tau,
-               "runtime": time.time() - start_time, "inc_tot_nodes": inc_tot_nodes, "tot_nodes": tot_nodes,
-               "mp_time": mp_time, "sp_time": sp_time, "scen_all": scen_all}
+    now_nice = f"{now.hour}:{now.minute}:{now.second}"
+    print(f"Instance R {env.inst_num}, completed at {now_nice}, solved in {np.round(runtime/60, 3)} minutes")
+    results = {"theta": theta_i, "inc_thetas_t": inc_thetas_t,
+               "inc_thetas_n": inc_thetas_n, "runtime": time.time() - start_time,
+               "tot_nodes": tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
 
-    with open(f"Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+    with open(f"CapitalBudgeting/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
-    # try:
-    #     env.plot_graph_solutions(K, y_i, tau_i, x=x_i, alg_type=problem_type)
-    # except:
-    #     pass
     return results
 
 

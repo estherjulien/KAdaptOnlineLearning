@@ -39,10 +39,10 @@ def scenario_fun_build(K, tau, graph):
     # deterministic constraints
     for k in np.arange(K):
         for j in np.arange(graph.N):
-            if j == 0:
+            if j == graph.s:
                 scen_model.addConstr(gp.quicksum(y[k][a] for a in graph.arcs_out[j]) >= 1)
                 continue
-            if j == N - 1:
+            if j == graph.t:
                 scen_model.addConstr(gp.quicksum(y[k][a] for a in graph.arcs_in[j]) >= 1)
                 continue
             scen_model.addConstr(
@@ -136,10 +136,10 @@ def scenario_fun_deterministic_build(graph):
 
     # deterministic constraints
     for j in np.arange(graph.N):
-        if j == 0:
+        if j == graph.s:
             smn.addConstr(gp.quicksum(y[a] for a in graph.arcs_out[j]) >= 1)
             continue
-        if j == N - 1:
+        if j == graph.t:
             smn.addConstr(gp.quicksum(y[a] for a in graph.arcs_in[j]) >= 1)
             continue
         smn.addConstr(
