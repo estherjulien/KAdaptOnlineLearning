@@ -5,7 +5,7 @@ import copy
 
 
 class Graph:
-    def __init__(self, N, gamma=3, inst_num=0, throw_away_perc=0.7, init_vertices=None, init_distances=None, init_s=None, init_t=None):
+    def __init__(self, N, gamma=3, inst_num=0, throw_away_perc=0.7, init_vertices=None, init_distances=None, init_s=None, init_t=None, plot=False):
         self.N = N
         if init_vertices is None:
             self.vertices, init_arcs = self.init_graph()
@@ -32,8 +32,13 @@ class Graph:
         self.inst_num = inst_num
         self.init_uncertainty = np.zeros(self.num_arcs)
 
+        if gamma is not None:
+            self.gamma = gamma
+        if plot:
+            self.plot_graph()
+
+    def set_gamma(self, gamma):
         self.gamma = gamma
-        # self.plot_graph()
 
     def vertices_fun(self):
         vertices_set = np.zeros([self.N, 2], dtype=np.float)

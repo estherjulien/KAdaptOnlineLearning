@@ -7,7 +7,7 @@ import copy
 import time
 
 
-def algorithm(K, env, time_limit=30*60, print_info=True, problem_type="test"):
+def algorithm(K, env, time_limit=30*60, print_info=True, problem_type="test", first_sol=False):
     # Initialize
     iteration = 0
     start_time = time.time()
@@ -76,16 +76,26 @@ def algorithm(K, env, time_limit=30*60, print_info=True, problem_type="test"):
                                                 np.round(theta, 4), np.round(zeta, 4),
                                                 [len(t) for t in placement.values()], prune_count))
 
-            try:
-                env.plot_graph_solutions(K, y, tau, x=x, alg_type=problem_type, tmp=True, it=iteration)
-            except:
-                pass
+            # try:
+            #     env.plot_graph_solutions(K, y, tau, x=x, alg_type=problem_type, tmp=True, it=iteration)
+            # except:
+            #     pass
 
             theta_i, x_i, y_i = (copy.deepcopy(theta), copy.deepcopy(x), copy.deepcopy(y))
             inc_thetas_t[time.time() - start_time] = theta_i
             inc_thetas_n[tot_nodes] = theta_i
             prune_count += 1
             new_model = True
+
+            if first_sol:
+                if sum(tau_i) > K:
+                    env.plot_graph(name="good")
+                    inst_label = False
+                else:
+                    env.plot_graph(name="bad")
+                    inst_label = False
+                return inst_label, theta_i, y_i, tau_i, iteration
+
             continue
         else:
             new_model = False
@@ -125,7 +135,7 @@ def algorithm(K, env, time_limit=30*60, print_info=True, problem_type="test"):
                "inc_thetas_n": inc_thetas_n, "runtime": time.time() - start_time,
                "tot_nodes": tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
 
-    with open(f"CapitalBudgeting/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+    with open(f"ShortestPathCluster/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
     return results
