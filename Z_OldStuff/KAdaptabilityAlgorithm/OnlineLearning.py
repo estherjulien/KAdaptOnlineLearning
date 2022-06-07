@@ -1,6 +1,5 @@
 # CHANGE THIS FOR NEW PROBLEMS
-from ShortestPath.ProblemMILPs.functions import *
-from ShortestPath.Attributes.att_functions import *
+from NOT_USED.ShortestPath.Attributes.att_functions import *
 
 from tensorflow.keras.models import load_model
 from joblib import Parallel, delayed

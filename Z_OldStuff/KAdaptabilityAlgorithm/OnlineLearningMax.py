@@ -1,7 +1,7 @@
 # CHANGE THIS FOR NEW PROBLEMS
 # from ShortestPath.ProblemMILPs.functions_2s import *
 # from ShortestPath.Attributes.att_functions_2s import *
-from CapitalBudgetingLoans.Attributes.att_functions import *
+from NOT_USED.CapitalBudgetingLoans.Attributes.att_functions import *
 
 from tensorflow.keras.models import load_model
 from joblib import Parallel, delayed

@@ -1,0 +1,2 @@
+New data generation with adaptive theta_compete. class_perc = 0.05 here
+TRAINED ON K4 N10 ct70 all?, I1000?

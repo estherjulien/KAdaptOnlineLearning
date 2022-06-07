@@ -5,18 +5,22 @@ import numpy as np
 import pickle
 
 
-def plot_stuff(problem_type, K, N, num_inst, level=5, thresh=False):
+def plot_stuff(K, N, num_inst, level=30, thresh=False, ml_model_type=None):
     results = [{}, {}]
     alg_types = ["Random", "Success Prediction"]
     num_algs = len(results)
     insts = []
     for i in np.arange(num_inst):
         try:
-            with open(f"CapitalBudgetingHigh/Data/Results/Decisions/inst_results/final_results_sp_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+            with open(f"SPSphereResults/inst_results/final_results_sp_random_sphere_N{N}_d5_tap90_g7_K{K}_inst{i}.pickle", "rb") as handle:
                 results[0][i] = pickle.load(handle)
 
-            with open(f"ShortestPathResults/Data/Results/Decisions/inst_results/final_results_sp_suc_pred_rf_nt_T[N{N}_K{K}]_ML[N50_I200_ct70_p5]_L30_inst{i}.pickle", "rb") as handle:
+            with open(f"SPSphereResults/inst_results/final_results_sp_suc_pred_rf_nt_T[N{N}_K{K}]_ML[{ml_model_type}]_L{level}_inst{i}.pickle", "rb") as handle:
                 results[1][i] = pickle.load(handle)
+            if results[1][i]["runtime"] > 32*60:
+                continue
+            if len(results[1][i]["inc_thetas_t"]) <= 2:
+                continue
             insts.append(i)
         except:
             continue
@@ -47,19 +51,20 @@ def plot_stuff(problem_type, K, N, num_inst, level=5, thresh=False):
         random_90 = np.quantile(obj[a], 0.9, axis=1)
         plt.fill_between(t_grid, random_10, random_90, alpha=0.5)
         plt.plot(t_grid, avg_random, label=alg_types[a])
-
+    plt.xlim([0, 31*60])
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Relative Objective")
     plt.legend(loc=1)
     if thresh:
-        plt.savefig(f"plot_runtime_{problem_type}_K{K}_N{N}_L{level}_{len(insts)}")
+        plt.savefig(f"plot_runtime_sp_sphere_K{K}_N{N}_L{level}_{len(insts)}")
     else:
-        plt.savefig(f"plot_runtime_{problem_type}_nt_K{K}_N{N}_L{level}_{len(insts)}")
+        plt.savefig(f"plot_runtime_sp_sphere_ML[{ml_model_type}]_K{K}_N{N}_L{level}_{len(insts)}")
     plt.close()
 
     # PLOT RESULTS OVER NODES
     n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in insts])
     n_grid = np.arange(0, n_grid_max+10, 10)
+    # n_grid = np.arange(0, 1000+10, 10)
     num_grids = len(n_grid)
     obj = []
     for a in np.arange(num_algs):
@@ -90,22 +95,23 @@ def plot_stuff(problem_type, K, N, num_inst, level=5, thresh=False):
     plt.ylabel("Relative Objective")
     plt.legend(loc=1)
     if thresh:
-        plt.savefig(f"plot_nodes_{problem_type}_K{K}_N{N}_L{level}_{len(insts)}")
+        plt.savefig(f"plot_nodes_sp_sphere_K{K}_N{N}_L{level}_{len(insts)}")
     else:
-        plt.savefig(f"plot_nodes_{problem_type}_nt_K{K}_N{N}_L{level}_{len(insts)}")
+        plt.savefig(f"plot_nodes_sp_sphere_ML[{ml_model_type}]_K{K}_N{N}_L{level}_{len(insts)}")
     plt.close()
 
 
-def plot_random(problem_type, K, N, num_inst, gamma=None, budget=None):
+def plot_random(problem_type, K, N, num_inst, gamma=None, degree=None, tap=None):
     results = [{}]
     alg_types = ["Random"]
     num_algs = len(results)
     insts = []
     for i in np.arange(num_inst):
         try:
-            with open(f"Knapsack/Data/Results/Decisions/inst_results/final_results_ks_random_N{N}_b{budget}_g{gamma}_K{K}_inst{i}.pickle", "rb") as handle:
+            with open(f"SPShereResults/inst_results/final_results_sp_random_sphere_N{N}_d{degree}_tap{tap}_g{gamma}"
+                      f"_K{K}_inst{i}.pickle", "rb") as handle:
                 results[0][i] = pickle.load(handle)
-            if results[0][i]["theta"] == 0:
+            if results[0][i]["theta"] > 1000:
                 continue
             insts.append(i)
         except:
@@ -141,14 +147,11 @@ def plot_random(problem_type, K, N, num_inst, gamma=None, budget=None):
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Relative Objective")
     plt.legend(loc=1)
-    if thresh:
-        plt.savefig(f"plot_runtime_{problem_type}_K{K}_N{N}_b{budget}_g{gamma}_{len(insts)}")
-    else:
-        plt.savefig(f"plot_runtime_{problem_type}_nt_K{K}_N{N}_b{budget}_g{gamma}_{len(insts)}")
+    plt.savefig(f"plot_runtime_{problem_type}_nt_K{K}_N{N}_d{degree}_tap{tap}_g{gamma}_{len(insts)}")
     plt.close()
 
     # PLOT RESULTS OVER NODES
-    n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in insts])
+    n_grid_max = np.max([results[0][i]["tot_nodes"] for i in insts])
     n_grid = np.arange(0, n_grid_max+10, 10)
     num_grids = len(n_grid)
     obj = []
@@ -179,43 +182,82 @@ def plot_random(problem_type, K, N, num_inst, gamma=None, budget=None):
     plt.xlabel("Nodes")
     plt.ylabel("Relative Objective")
     plt.legend(loc=1)
-    if thresh:
-        plt.savefig(f"plot_nodes_{problem_type}_K{K}_N{N}_b{budget}_g{gamma}_{len(insts)}")
-    else:
-        plt.savefig(f"plot_nodes_{problem_type}_nt_K{K}_N{N}_b{budget}_g{gamma}_{len(insts)}")
+    plt.savefig(f"plot_nodes_{problem_type}_nt_K{K}_N{N}_d{degree}_tap{tap}_g{gamma}_{len(insts)}")
     plt.close()
+    return results[0]
 
 
-def show_stuff(N, K, num_inst, level, thresh=False):
-    results = [{}, {}]
-    alg_types = ["Random", "Success Prediction"]
-    num_algs = len(results)
-    insts = []
-    for i in np.arange(num_inst):
-        try:
-            with open(f"Results_25-1-22_NEW/Decisions/inst_results/final_results_cb_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
-                results[0][i] = pickle.load(handle)
+def show_stuff_sp(normal=True):
+    num_inst = 16
+    index = [(N, degree, tap, gamma, i) for N in [50]
+             for degree in [3, 4, 5, 6]
+             for tap in [70, 80, 90]
+             for gamma in [1, 2, 3, 4, 5, 6, 7, 8]
+             for i in np.arange(num_inst)]
+    index_avg = [(N, degree, tap, gamma) for N in [50]
+                 for degree in [3, 4, 5, 6]
+                 for tap in [70, 80, 90]
+                 for gamma in [1, 2, 3, 4, 5, 6, 7, 8]]
+    df_results = pd.DataFrame(index=index, columns=["obj_change", "num_res"], dtype=float)
+    df_results.index = pd.MultiIndex.from_tuples(df_results.index)
+    df_avg_results = pd.DataFrame(index=index_avg, columns=[*["10%", "50%", "90%"], "num_sols"], dtype=float)
+    df_avg_results.index = pd.MultiIndex.from_tuples(df_avg_results.index)
 
-            if thresh:
-                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
-                    results[1][i] = pickle.load(handle)
-            else:
-                with open(f"Results_27-1-22/Decisions/inst_results/final_results_cb_suc_pred_rf_p5_nt_N{N}_K{K}_L{level}_inst{i}.pickle", "rb") as handle:
-                    results[1][i] = pickle.load(handle)
-            insts.append(i)
-        except:
-            continue
-    for alg, alg_results in enumerate(results):
-        optimal = np.array([res["runtime"] < 60*30 for res in alg_results.values()]).mean()
-        print(f"{alg_types[alg]}: optimal within time limit = {optimal}")
+    ind = pd.IndexSlice
+    for N in [50]:
+        for degree in [3, 4, 5, 6]:
+            for tap in [70, 80, 90]:
+                for gamma in np.arange(1, 9):
+                    insts = []
+                    for i in np.arange(num_inst):
+                        try:
+                            if normal:
+                                with open(f"SPSphereResults/inst_results/final_results_sp_normal_test_random_N{N}_d{degree}_tap{tap}_g{gamma}_K4_inst{i}.pickle", "rb") as handle:
+                                    res = pickle.load(handle)
+                            else:
+                                try:
+                                    with open(f"SPSphereResults/TestResults/final_results_sp_sphere_test_random_N{N}_d{degree}_tap{tap}_g{gamma}_K4_inst{i}.pickle", "rb") as handle:
+                                        res = pickle.load(handle)
+                                except:
+                                    with open(f"SPSphereResults/inst_results/final_results_sp_random_sphere_N{N}_d{degree}_tap{tap}_g{gamma}_K4_inst{i}.pickle", "rb") as handle:
+                                        pickle.load(handle)
+                            obj_change = list(res["inc_thetas_t"].values())[0] / res["theta"] - 1
+                            num_res = len(res["inc_thetas_t"]) - 1
+                            df_results.loc[(N, degree, tap, gamma, i)] = [obj_change, num_res]
+                            insts.append(i)
+                        except:
+                            continue
+                    if len(insts) == 0:
+                        continue
+                    change_description = df_results.loc[ind[N, degree, tap, gamma, :]]["obj_change"].describe(percentiles=[0.1, 0.5, 0.9])[["10%", "50%", "90%"]].round(5).to_list()
+                    num_sols = df_results.loc[ind[N, degree, tap, gamma, :]]["num_res"].mean().round(2)
+                    if change_description[1] > 0.025:
+                        print(f"N{N}    degree{degree}      tap{tap}        gamma{gamma}    :   num_sols = {num_sols}   change = {change_description}")
+                    df_avg_results.loc[(N, degree, tap, gamma)] = [*change_description, num_sols]
+    df_results.index = pd.MultiIndex.from_tuples(df_results.index)
+    df_avg_results.index = pd.MultiIndex.from_tuples(df_avg_results.index)
+    return df_results, df_avg_results
 
+
+# df_results = show_stuff_sp()
 
 num_inst = 112
-
-thresh = False
-for K in [10]:
-    for gamma in [25]:
-        for budget in [10]:
-            print(f"K = {K}, g = {gamma}, budget = {budget}")
-            for N in [100]:
-                plot_random("ks", K, N, num_inst, gamma=gamma, budget=budget)
+for N in [20, 80, 100]:
+    for K in [3, 4, 5, 6]:
+        for ml_model_type in ["N20_K4_I2000_ct70_p5"]:
+            try:
+                plot_stuff(K=K, N=N, num_inst=num_inst, ml_model_type=ml_model_type, level=30)
+            except IndexError:
+                print(f"N = {N}, K = {K} has no results")
+# results = plot_random("sp", K=3, N=50, num_inst=num_inst, gamma=7, degree=5, tap=90)
+# results_2 = pd.DataFrame(columns=["obj_change", "num_res"], dtype=float)
+# for i, res in results.items():
+#     obj_change = list(res["inc_thetas_t"].values())[0] / list(res["inc_thetas_t"].values())[-1] - 1
+#     num_res = len(res["inc_thetas_t"]) - 1
+#     df_results.loc[i] = [obj_change, num_res]
+# print("NORMAL")
+# _, df_normal = show_stuff_sp()
+# print(df_normal.describe())
+# print("\nSPHERE")
+# _, df_sphere = show_stuff_sp(normal=False)
+# print(df_sphere.describe())
