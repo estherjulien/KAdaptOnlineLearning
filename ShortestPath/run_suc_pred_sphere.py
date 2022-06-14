@@ -11,16 +11,16 @@ if __name__ == "__main__":
     thresh = int(sys.argv[5])
 
     # load environment
-    with open(f"ShortestPathCluster/Data/Instances/inst_results/sp_env_N{N}_{i}.pickle", "rb") as handle:
+    with open(f"ShortestPath/Data/Instances/inst_results/sp_env_sphere_N{N}_{i}.pickle", "rb") as handle:
         env = pickle.load(handle)
 
-    success_model_name = f"ShortestPathCluster/Data/Models/rf_class_cb_p5_N10_K4_ct70_all.joblib"
+    # success_model_name = f"ShortestPathCluster/Data/Models/rf_class_sp_p5_N10_K4_ct70_all.joblib"
 
     # run algorithm with threshold
     if thresh:
-        problem_type = f"sp_suc_pred_rf_p5_N{N}_K{K}_L{max_level}"
+        problem_type = f"sp_suc_pred_thresh_N{N}_K{K}_L{max_level}"
         algorithm(K, env, max_level=max_level, problem_type=problem_type, success_model_name=success_model_name, thresh=0.1)
     else:
-        problem_type = f"sp_suc_pred_rf_p5_nt_N{N}_K{K}_L{max_level}"
+        problem_type = f"sp_suc_pred_N{N}_K{K}_L{max_level}"
         algorithm(K, env, max_level=max_level, problem_type=problem_type, success_model_name=success_model_name)
 

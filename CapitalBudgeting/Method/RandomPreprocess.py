@@ -1,105 +1,70 @@
-from ShortestPathCluster.ProblemFunctions.att_functions_high import *
-from ShortestPathCluster.ProblemFunctions.functions_milp import *
+from ProblemFunctions.functions_milp import *
 
-from tensorflow.keras.models import load_model
 from datetime import datetime
 import numpy as np
-import joblib
 import pickle
 import copy
 import time
 
 
-def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, time_limit=30 * 60, print_info=True,
-              problem_type="test", thresh=None, num_runs=5):
-    if att_series is None:
-        att_series = ["coords", "obj_det", "y_det", "slack", "const_to_z_dist", "const_to_const_dist"]
+def algorithm(K, env, time_limit=30*60, print_info=True, problem_type="test", num_runs=5):
     # Initialize
+    iteration = 0
     start_time = time.time()
     # initialization for saving stuff
     inc_thetas_t = dict()
     inc_thetas_n = dict()
     prune_count = 0
+    inc_tot_nodes = dict()
+    tot_nodes = 0
+    inc_tot_nodes[0] = 0
     mp_time = 0
     sp_time = 0
+    # initialization of lower and upper bounds
+    theta_i, x_i, y_i = (env.upper_bound, [], [])
+    # K-branch and bound algorithm
+    now = datetime.now().time()
+    xi_new, k_new = None, None
+
     new_model = True
-    # FOR STATIC ATTRIBUTE
-    x_static = None
+    # initialize N_set with actual scenario
+    N_set, tau, scen_all, placement, theta, x, y, model = fill_subsets(K, env)
 
-    det_model = scenario_fun_deterministic_build(env)
+    new_xi_num = K - 1
 
-    # initialize N_set
-    N_set, tau, scen_all, att_all, att_all_k, zeta_init = fill_subsets(K, env, att_series, x_static)
-
-    N_set_trash = []
-    # run a few times to get theta_init, tot_scens_init
-    # init random passes
-    theta_i = np.inf
-    init_theta_list = []
-    tot_scens_init_list = []
-    tot_nodes = 0
     for i in np.arange(num_runs):
-        theta, tot_scens, new_nodes = random_pass(K, env, tau)
-        init_theta_list.append(theta)
-        tot_scens_init_list.append(tot_scens)
+        theta, tot_scens, new_nodes, num_per_subset = random_pass(K, env, tau)
         tot_nodes += new_nodes
         if theta - theta_i > -1e-8:
             continue
         else:   # store incumbent theta
+            if print_info:
+                now = datetime.now().time()
+                print("Instance R {}: ROBUST DURING PREPROCESSING at iteration {} ({}) (time {})   :theta = {},  Xi{},   "
+                      "prune count = {}".format(env.inst_num, iteration, np.round(time.time()-start_time, 3), now,
+                                                np.round(theta, 4), num_per_subset, prune_count))
+
             theta_i = copy.deepcopy(theta)
             inc_thetas_t[time.time() - start_time] = theta_i
             inc_thetas_n[tot_nodes] = theta_i
 
-    theta_init = np.mean(init_theta_list)
-    tot_scens_init = np.mean(init_theta_list)
-
-    # save stuff
-    runtime = time.time() - start_time
-    inc_thetas_t[runtime] = theta_i
-    inc_thetas_n[tot_nodes] = theta_i
-
-    if success_model_name is None:
-        success_model_name = f"./Data/Models/nn_regr_cb_N10_K2_test_all_norm_D5_W100.h5"
-    if "nn_" in success_model_name:
-        nn_used = True
-        success_model = load_model(success_model_name)
-    else:
-        nn_used = False
-        success_model = joblib.load(success_model_name)
-
-    att_index = att_index_maker(env, att_series)
-
-    new_xi_num = len(scen_all) - 1
-    from_trash = False
-    # K-branch and bound algorithm
-    now = datetime.now().time()
-    print("Instance S {}: started at {}".format(env.inst_num, now))
-    while (N_set or N_set_trash) and time.time() - start_time < time_limit:
+    print(f"Instance R {env.inst_num}: started at {now}")
+    while N_set and time.time() - start_time < time_limit:
         # MASTER PROBLEM
         if new_model:
             tot_nodes += 1
             # take new node
-            if N_set:
-                new_pass = np.random.randint(len(N_set))
-                placement = N_set.pop(new_pass)
-                from_trash = False
-            else:
-                new_pass = np.random.randint(len(N_set_trash))
-                placement = N_set_trash.pop(new_pass)
-                from_trash = True
-
+            new_pass = np.random.randint(len(N_set))
+            placement = N_set.pop(new_pass)
             tau = {k: scen_all[placement[k]] for k in np.arange(K)}
-
             # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_build(K, tau, env)
             mp_time += time.time() - start_mp
-            theta_pre, zeta_pre = [1, 1]
         else:
-            theta_pre = copy.copy(theta)
-            zeta_pre = copy.copy(zeta)
-            # new node from k_new
+            # make new tau from k_new
             tot_nodes += 1
+
             # master problem
             start_mp = time.time()
             theta, x, y, model = scenario_fun_update(K, k_new, xi, env, model)
@@ -116,19 +81,18 @@ def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, tim
 
         # SUBPROBLEM
         start_sp = time.time()
-        zeta, xi = separation_fun(K, x, y, theta, env, placement)
+        zeta, xi = separation_fun(K, x, y, theta, env, tau)
         sp_time += time.time() - start_sp
 
         # check if robust
         if zeta <= 1e-04:
             if print_info:
                 now = datetime.now().time()
-                print("Instance S {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    zeta = {}   Xi{},   "
-                      "prune count = {}".format(
-                    env.inst_num, tot_nodes, np.round(time.time() - start_time, 3), now, np.round(theta, 4),
-                    np.round(zeta, 4), [len(t) for t in placement.values()], prune_count))
-
-            theta_i = copy.deepcopy(theta)
+                print("Instance R {}: ROBUST at iteration {} ({}) (time {})   :theta = {},    zeta = {}   Xi{},   "
+                      "prune count = {}".format(env.inst_num, iteration, np.round(time.time()-start_time, 3), now,
+                                                np.round(theta, 4), np.round(zeta, 4),
+                                                [len(t) for t in placement.values()], prune_count))
+            theta_i, x_i, y_i = (copy.deepcopy(theta), copy.deepcopy(x), copy.deepcopy(y))
             inc_thetas_t[time.time() - start_time] = theta_i
             inc_thetas_n[tot_nodes] = theta_i
             prune_count += 1
@@ -144,38 +108,9 @@ def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, tim
             K_set = [0]
             k_new = 0
         elif len(full_list) == K:
-            # predict subset
-            if sum([len(t) for t in tau.values()]) - K >= max_level:
-                K_set = np.arange(K)
-                k_new = np.random.randint(K)
-                # add nothing
-                empty_array = np.empty((1, len(att_all[0])))
-                empty_array[:] = np.nan
-                att_all = np.vstack([att_all, empty_array])
-                att_all_k.append([])
-            else:
-                # find attribute of new scenario
-                scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, det_model=det_model)
-                att_all = np.vstack([att_all, scen_att])
-                att_all_k.append(scen_att_k)
-
-                # STATE FEATURES (based on master and sub problem)
-                tot_scens = np.sum([len(t) for t in tau.values()])
-                k_att_sel = {k: np.array([att_all_k[p][k] for p in placement[k]]) for k in np.arange(K)}
-                tau_att = {k: np.hstack([att_all[placement[k]], k_att_sel[k]]) for k in np.arange(K)}
-                tau_s = state_features(theta, zeta, tot_scens, tot_scens_init, theta_init, zeta_init, theta_pre, zeta_pre)
-                K_set, predictions = predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, tau_s, nn_used)
-                if thresh is not None and not from_trash and np.all(predictions < thresh):
-                    N_set_trash.append(placement)
-                    new_model = True
-                    continue
-                k_new = K_set[0]
+            K_set = np.arange(K)
+            k_new = np.random.randint(K)
         else:
-            # find attributes here too
-            scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, det_model=det_model)
-            att_all = np.vstack([att_all, scen_att])
-            att_all_k.append(scen_att_k)
-
             K_prime = min(K, full_list[-1] + 2)
             K_set = np.arange(K_prime)
             k_new = K_set[-1]
@@ -187,6 +122,8 @@ def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, tim
             placement_tmp = copy.deepcopy(placement)
             placement_tmp[k].append(new_xi_num)
             N_set.append(placement_tmp)
+
+        iteration += 1
     # termination results
     runtime = time.time() - start_time
     inc_thetas_t[time.time() - start_time] = theta_i
@@ -194,34 +131,30 @@ def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, tim
 
     now = datetime.now().time()
     now_nice = f"{now.hour}:{now.minute}:{now.second}"
-    print(f"Instance SP {env.inst_num}, completed at {now_nice}, solved in {np.round(runtime/60, 3)} minutes")
-
+    print(f"Instance R {env.inst_num}, completed at {now_nice}, solved in {np.round(runtime/60, 3)} minutes")
     results = {"theta": theta_i, "inc_thetas_t": inc_thetas_t,
                "inc_thetas_n": inc_thetas_n, "runtime": time.time() - start_time,
                "tot_nodes": tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
 
-    with open(f"ShortestPath/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+    with open(f"CapitalBudgeting/Data/Results/Decisions/inst_results/final_results_{problem_type}_"
+              f"inst{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
     return results
 
 
-def fill_subsets(K, env, att_series, progress=False):
+def fill_subsets(K, env, progress=False):
     # Initialize
     start_time = time.time()
 
     # K-branch and bound algorithm
     new_model = True
 
-    det_model = scenario_fun_deterministic_build(env)
-
-    xi_init, att_init, att_init_k = init_scen(K, env, att_series, det_model)
+    xi_init = init_scen(K, env)
 
     N_set = [{k: [] for k in np.arange(K)}]
     N_set[0][0].append(0)
     scen_all = xi_init.reshape([1, -1])
-    att_all = np.array(att_init).reshape([1, -1])
-    att_all_k = [att_init_k]
     new_xi_num = 0
     while True:
         # MASTER PROBLEM
@@ -259,9 +192,6 @@ def fill_subsets(K, env, att_series, progress=False):
             new_model = False
             new_xi_num += 1
             scen_all = np.vstack([scen_all, xi])
-            scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, det_model=det_model)
-            att_all = np.vstack([att_all, scen_att])
-            att_all_k.append(scen_att_k)
 
         full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
         K_prime = min(K, full_list[-1] + 2)
@@ -276,10 +206,10 @@ def fill_subsets(K, env, att_series, progress=False):
             placement_tmp[k].append(new_xi_num)
             N_set.append(placement_tmp)
 
-    return N_set[::-1], tau, scen_all, att_all, att_all_k, zeta
+    return N_set, tau, scen_all, placement, theta, x, y, model
 
 
-def init_scen(K, env, att_series, det_model):
+def init_scen(K, env):
     tau = {k: [] for k in np.arange(K)}
     tau[0].append(env.init_uncertainty)
 
@@ -289,9 +219,7 @@ def init_scen(K, env, att_series, det_model):
     # run sub problem
     zeta, xi_new = separation_fun(K, x, y, theta, env, tau)
 
-    # attributes
-    first_att_part, k_att_part = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y, det_model=det_model)
-    return xi_new, first_att_part, k_att_part
+    return xi_new
 
 
 def random_pass(K, env, tau, progress=False):
@@ -326,7 +254,7 @@ def random_pass(K, env, tau, progress=False):
             if progress:
                 now = datetime.now().time()
                 print(
-                    "Instance SPD {}: INIT PASS ROBUST ({}) (time {})   :theta = {},    zeta = {}   Xi{}".format(
+                    "Instance R {}: RAND PASS ROBUST ({}) (time {})   :theta = {},    zeta = {}   Xi{}".format(
                         env.inst_num, np.round(time.time() - start_time, 3), now,
                         np.round(theta, 4), np.round(zeta, 4), [len(t) for t in tau.values()]))
             break
@@ -336,5 +264,6 @@ def random_pass(K, env, tau, progress=False):
         # choose new k randomly
         k_new = np.random.randint(K)
 
-    tot_scens = np.sum([len(t) for t in tau.values()])
-    return theta, tot_scens, tot_nodes
+    num_per_subset = [len(t) for t in tau.values()]
+    tot_scens = np.sum(num_per_subset)
+    return theta, tot_scens, tot_nodes,  num_per_subset

@@ -134,7 +134,7 @@ def algorithm(K, env, time_limit=30*60, print_info=True, problem_type="test", fi
                "inc_thetas_n": inc_thetas_n, "runtime": time.time() - start_time,
                "tot_nodes": tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
 
-    with open(f"ShortestPathCluster/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+    with open(f"ShortestPath/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
     return results

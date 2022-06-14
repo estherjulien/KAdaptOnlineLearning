@@ -7,16 +7,20 @@ import numpy as np
 import joblib
 
 
-def predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, state_features, nn_used=False):
-    X = input_fun(K, state_features, tau_att, scen_att, scen_att_k, att_index)
+def predict_subset(K, tau_att, scen_att, scen_att_k, success_model, att_index, state_features, full_list=None):
+    X = input_fun(K, state_features, tau_att, scen_att, scen_att_k, att_index, full_list)
 
-    if nn_used:
-        success_prediction = success_model.predict(X)[:, 0]
-    else:
-        pred_tmp = success_model.predict_proba(X)
-        success_prediction = np.array([i[1] for i in pred_tmp])
-    order = np.argsort(success_prediction)
-    return order[::-1], success_prediction
+    pred_tmp = success_model.predict_proba(X)
+    success_prediction = np.array([i[1] for i in pred_tmp])
+    order = np.argsort(success_prediction)[::-1]
+
+    if full_list is not None and len(full_list) < K:
+        suc_pred_order = np.array([success_prediction[i] for i in order])
+        pre_order = order[np.where(suc_pred_order > 0.5)]
+        post_order = order[np.where(suc_pred_order <= 0.5)]
+        empty_K = len(full_list)
+        order = np.hstack([pre_order, [empty_K], post_order])
+    return order, success_prediction
 
 
 def state_features(theta, zeta, depth, depth_i, theta_i, zeta_i, theta_pre, zeta_pre):
@@ -33,16 +37,18 @@ def state_features(theta, zeta, depth, depth_i, theta_i, zeta_i, theta_pre, zeta
     return np.array(features)
 
 
-def input_fun(K, state_features, tau_att, scen_att_pre, scen_att_k, att_index):
+def input_fun(K, state_features, tau_att, scen_att_pre, scen_att_k, att_index, full_list=None):
+    if full_list is None:
+        full_list = np.arange(K)
     att_num = len(att_index)
-    scen_att = {k: np.array(scen_att_pre + scen_att_k[k]) for k in np.arange(K)}
+    scen_att = {k: np.array(scen_att_pre + scen_att_k[k]) for k in full_list}
 
     diff_info = {k: [] for k in np.arange(K)}
-    for k in np.arange(K):
+    for k in full_list:
         for att_type in np.arange(att_num):
             diff_info[k].append(np.linalg.norm(np.mean(tau_att[k][:, att_index[att_type]], axis=0) - scen_att[k][att_index[att_type]]) / len(att_index[att_type]))
 
-    X = np.array([np.hstack([state_features, diff_info[k]]) for k in np.arange(K)])
+    X = np.array([np.hstack([state_features, diff_info[k]]) for k in full_list])
 
     return X
 

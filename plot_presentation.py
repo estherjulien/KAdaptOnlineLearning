@@ -54,7 +54,7 @@ def plot_stuff(problem_type, K, N, num_inst, level=5):
         plt.fill_between(t_grid, random_10, random_90, alpha=0.3, color=[cols[a]])
         plt.plot(t_grid, avg_random, label=alg_types[a])
 
-    plt.ylim([0.8, 1.1])
+    plt.ylim([0.8, 1.05])
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Relative Objective")
     plt.legend(loc=4)

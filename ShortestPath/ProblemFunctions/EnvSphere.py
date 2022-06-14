@@ -4,12 +4,10 @@ import seaborn as sns
 import numpy as np
 import pickle
 import math
-import copy
-import time
 
 
 class Graph:
-    def __init__(self, N, gamma=3, inst_num=0, degree=4, throw_away_perc=0.9, init_vertices=None, init_distances=None, init_s=None, init_t=None, plot=False):
+    def __init__(self, N, gamma=7, inst_num=0, degree=5, throw_away_perc=0.9, init_vertices=None, init_distances=None, init_s=None, init_t=None, plot=False):
         self.N = N
         self.degree = degree
         self.throw_away_perc = throw_away_perc

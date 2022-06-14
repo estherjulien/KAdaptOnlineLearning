@@ -13,10 +13,10 @@ if __name__ == "__main__":
 
     # save per instance
     for i, env in enumerate(env_list):
-        with open(f"CapitalBudgetingHigh/Data/Instances/inst_results/cb_test_env_N{N}_{i}.pickle", "wb") as handle:
+        with open(f"CapitalBudgeting/Data/Instances/inst_results/cb_env_N{N}_{i}.pickle", "wb") as handle:
             pickle.dump(env, handle)
 
     # save all
-    with open(f"CapitalBudgetingHigh/Data/Instances/cb_test_env_list_N{N}_{num_instances}.pickle", "wb") as handle:
+    with open(f"CapitalBudgeting/Data/Instances/cb_env_list_N{N}_{num_instances}.pickle", "wb") as handle:
         pickle.dump(env_list, handle)
 

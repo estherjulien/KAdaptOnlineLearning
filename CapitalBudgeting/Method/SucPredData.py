@@ -88,15 +88,15 @@ def data_gen_fun_max(K, env, att_series, problem_type="test", time_limit=5*60, p
           f"Data points = {len(success_data)}, Y: [{Y_10},{Y_mean},{Y_90}], R: {num_runs_info}")
     results = {"X": input_data, "Y": success_data}
 
-    with open(f"CapitalBudgetingHigh/Data/Results/TrainData/inst_results/data_results_{problem_type}_"
+    with open(f"CapitalBudgeting/Data/Results/TrainData/inst_results/data_results_{problem_type}_"
               f"{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
     # save information
-    pd.Series([level, rt_mean, num_start_nodes, tot_scens_init, time_per_node, *num_runs_info, runtime],
-              index=["level", "rt_mean", "num_start_nodes", "tot_scens_init", "time_per_node",
+    pd.Series([len(input_data), level, rt_mean, num_start_nodes, tot_scens_init, time_per_node, *num_runs_info, runtime],
+              index=["datapoints", "level", "rt_mean", "num_start_nodes", "tot_scens_init", "time_per_node",
                      "num_runs_min", "num_runs_mean", "num_runs_max", "runtime"],
-              dtype=float).to_pickle(f"CapitalBudgetingHigh/Data/RunInfo/"
+              dtype=float).to_pickle(f"CapitalBudgeting/Data/RunInfo/"
                                      f"run_info_{problem_type}_inst{env.inst_num}.pickle")
 
 

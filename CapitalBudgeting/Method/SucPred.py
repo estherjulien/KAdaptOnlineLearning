@@ -46,13 +46,19 @@ def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, tim
     tot_scens_init_list = []
     tot_nodes = 0
     for i in np.arange(num_runs):
-        theta, tot_scens, new_nodes = random_pass(K, env, tau)
+        theta, tot_scens, new_nodes, num_in_subset, zeta = random_pass(K, env, tau)
         init_theta_list.append(theta)
         tot_scens_init_list.append(tot_scens)
         tot_nodes += new_nodes
         if theta - theta_i > -1e-8:
             continue
         else:   # store incumbent theta
+            if print_info:
+                now = datetime.now().time()
+                print("Instance S {}: ROBUST DURING PREPROCESSING at iteration {} ({}) (time {})   :theta = {},    zeta = {}   Xi{},   "
+                      "prune count = {}".format(
+                    env.inst_num, tot_nodes, np.round(time.time() - start_time, 3), now, np.round(theta, 4),
+                    np.round(zeta, 4), num_in_subset, prune_count))
             theta_i = copy.deepcopy(theta)
             inc_thetas_t[time.time() - start_time] = theta_i
             inc_thetas_n[tot_nodes] = theta_i
@@ -210,7 +216,7 @@ def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, tim
                "inc_thetas_n": inc_thetas_n, "runtime": time.time() - start_time,
                "tot_nodes": tot_nodes, "mp_time": mp_time, "sp_time": sp_time}
 
-    with open(f"CapitalBudgetingHigh/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
+    with open(f"CapitalBudgeting/Data/Results/Decisions/inst_results/final_results_{problem_type}_inst{env.inst_num}.pickle", "wb") as handle:
         pickle.dump(results, handle)
 
     return results
@@ -353,87 +359,6 @@ def random_pass(K, env, tau, progress=False):
 
         # choose new k randomly
         k_new = np.random.randint(K)
-
-    tot_scens = np.sum([len(t) for t in tau.values()])
-    return theta, tot_scens, tot_nodes
-
-
-def init_pass(K, env, att_series, x_static=None, stat_model=None, det_model=None):
-    # Initialize
-    start_time = time.time()
-    tot_nodes = 0
-
-    # K-branch and bound algorithm
-    new_model = True
-
-    # initialize N_set with actual scenario
-    xi_init, att_init, att_init_k, zeta_init = init_scen(K, env, att_series, x_static=x_static, stat_model=stat_model,
-                                             det_model=det_model)
-    N_set = [{k: [] for k in np.arange(K)}]
-    N_set[0][0].append(0)
-    scen_all = xi_init.reshape([1, -1])
-    att_all = att_init.reshape([1, -1])
-    att_all_k = [att_init_k]
-    new_xi_num = 0
-    while True:
-        # MASTER PROBLEM
-        if new_model:
-            # master problem
-            placement = N_set.pop(0)
-            tau = {k: scen_all[placement[k]] for k in np.arange(K)}
-            theta, x, y, model = scenario_fun_build(K, tau, env)
-        else:
-            # NEW NODE from k_new
-            tot_nodes += 1
-            # master problem
-            placement[k_new].append(new_xi_num)
-            theta, x, y, model = scenario_fun_update(K, k_new, xi, env, model)
-
-            tau = {k: scen_all[placement[k]] for k in np.arange(K)}
-
-        # SUBPROBLEM
-        zeta, xi = separation_fun(K, x, y, theta, env, placement)
-
-        # check if robust
-        if zeta < 1e-04:
-            now = datetime.now().time()
-            print(
-                "Instance S {}: INIT PASS ROBUST ({}) (time {})   :theta = {},    zeta = {}   Xi{}".format(
-                    env.inst_num, np.round(time.time() - start_time, 3), now,
-                    np.round(theta, 4), np.round(zeta, 4), [len(t) for t in placement.values()]))
-            break
-        else:
-            new_model = False
-            new_xi_num += 1
-            scen_all = np.vstack([scen_all, xi])
-            scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, x_static=x_static,
-                                          stat_model=stat_model, det_model=det_model)
-            att_all = np.vstack([att_all, scen_att])
-            att_all_k.append(scen_att_k)
-
-        full_list = [k for k in np.arange(K) if len(tau[k]) > 0]
-        if len(full_list) == 0:
-            K_set = [0]
-            k_new = 0
-        elif len(full_list) == K:
-            K_set = np.arange(K)
-            k_new = np.random.randint(K)
-        else:
-            K_prime = min(K, full_list[-1] + 2)
-            K_set = np.arange(K_prime)
-            k_new = K_set[-1]
-
-        for k in K_set:
-            if k == k_new:
-                continue
-            # add to node set
-            placement_tmp = copy.deepcopy(placement)
-            placement_tmp[k].append(new_xi_num)
-            N_set.append(placement_tmp)
-
-    tot_scens = np.sum([len(t) for t in placement.values()])
-    tau = {k: scen_all[placement[k]] for k in np.arange(K)}
-    return theta, x, y, tau, N_set, scen_all, att_all, att_all_k, tot_nodes, tot_scens, zeta_init
-
-
-
+    num_in_subset = [len(t) for t in tau.values()]
+    tot_scens = np.sum(num_in_subset)
+    return theta, tot_scens, tot_nodes, num_in_subset, zeta

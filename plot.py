@@ -241,23 +241,240 @@ def show_stuff_sp(normal=True):
 
 # df_results = show_stuff_sp()
 
-num_inst = 112
-for N in [20, 80, 100]:
-    for K in [3, 4, 5, 6]:
-        for ml_model_type in ["N20_K4_I2000_ct70_p5"]:
+def diff_cb_random():
+    num_instances = 112
+    K_list = [2, 3, 4, 5, 6]
+    N_list = [10, 20, 30]
+    results = pd.DataFrame(index=N_list, columns=K_list, dtype=float)
+    insts = pd.DataFrame(0, index=N_list, columns=K_list, dtype=int)
+
+    for K in K_list:
+        for N in N_list:
+            for i in np.arange(num_instances):
+                diff = []
+                try:
+                    with open(f"CapitalBudgeting/Data/Results/Decisions/inst_results/final_results_cb_random_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+                        res = pickle.load(handle)
+                    insts.loc[N, K] += 1
+                except FileNotFoundError:
+                    continue
+                first = list(res["inc_thetas_t"].values())[0]
+                last = res["theta"]
+                diff.append(abs((first-last)/last))
+            results.loc[N, K] = np.mean(diff)*100
+    return results, insts, N_list, K_list
+
+
+def diff_sp_normal_random():
+    num_instances = 112
+    K_list = [2, 3, 4, 5, 6]
+    N_list = [20, 40, 60]
+    results = pd.DataFrame(index=N_list, columns=K_list, dtype=float)
+    insts = pd.DataFrame(0, index=N_list, columns=K_list, dtype=int)
+    for K in K_list:
+        for N in N_list:
+            for i in np.arange(num_instances):
+                diff = []
+                try:
+                    with open(f"ShortestPath/Data/Results/Decisions/inst_results/final_results_sp_random_normal_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+                        res = pickle.load(handle)
+                    insts.loc[N, K] += 1
+                except FileNotFoundError:
+                    continue
+                first = list(res["inc_thetas_t"].values())[0]
+                last = res["theta"]
+                diff.append(abs((first-last)/last))
+            results.loc[N, K] = np.mean(diff)*100
+    return results, insts, N_list, K_list
+
+
+def diff_sp_sphere_random():
+    num_instances = 112
+    K_list = [2, 3, 4, 5, 6]
+    N_list = [20, 40, 60]
+    results = pd.DataFrame(index=N_list, columns=K_list, dtype=float)
+    insts = pd.DataFrame(0, index=N_list, columns=K_list, dtype=int)
+    for K in K_list:
+        for N in N_list:
+            for i in np.arange(num_instances):
+                diff = []
+                try:
+                    with open(f"ShortestPath/Data/Results/Decisions/inst_results/final_results_sp_random_sphere_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+                        res = pickle.load(handle)
+                    insts.loc[N, K] += 1
+                except FileNotFoundError:
+                    continue
+                first = list(res["inc_thetas_t"].values())[0]
+                last = res["theta"]
+                diff.append(abs((first-last)/last))
+            results.loc[N, K] = np.mean(diff)*100
+    return results, insts, N_list, K_list
+
+
+def plot_diff_random(cb=False, sp_normal=False, sp_sphere=False):
+    if cb:
+        results, _, N_list, K_list = diff_cb_random()
+        save_name = "cb"
+    elif sp_normal:
+        results, _, N_list, K_list = diff_sp_normal_random()
+        save_name = "sp_normal"
+    elif sp_sphere:
+        results, _, N_list, K_list = diff_sp_sphere_random()
+        save_name = "sp_sphere"
+    sn.set()
+    sn.color_palette("rocket", as_cmap=True)
+    fig, ax = plt.subplots(figsize=(10,5))
+
+    results.plot(style='o-', ax=ax)
+    plt.xticks(N_list)
+    plt.legend(title="K")
+    plt.xlabel("Instance size ($N$)", fontsize=15)
+    plt.ylabel("Total increase of objective ($\%$)", fontsize=15)
+    plt.savefig("bla_diff_test")
+    plt.savefig(f"diff_results_{save_name}.pdf", dpi=400)
+
+
+def plot_cb_level(K, I):
+    results = [{}, {}]
+    alg_types = ["Random", "Success Prediction"]
+    num_inst = 112
+    num_algs = len(results)
+    for L in [5, 10, 30, 20, 40, 50, 60, 70]:
+        save_name = f"cb_ML[N10_K{K}_I{I}]_T[N10_K{K}]_L{L}"
+        insts = []
+        for i in np.arange(num_inst):
             try:
-                plot_stuff(K=K, N=N, num_inst=num_inst, ml_model_type=ml_model_type, level=30)
-            except IndexError:
-                print(f"N = {N}, K = {K} has no results")
-# results = plot_random("sp", K=3, N=50, num_inst=num_inst, gamma=7, degree=5, tap=90)
-# results_2 = pd.DataFrame(columns=["obj_change", "num_res"], dtype=float)
-# for i, res in results.items():
-#     obj_change = list(res["inc_thetas_t"].values())[0] / list(res["inc_thetas_t"].values())[-1] - 1
-#     num_res = len(res["inc_thetas_t"]) - 1
-#     df_results.loc[i] = [obj_change, num_res]
-# print("NORMAL")
-# _, df_normal = show_stuff_sp()
-# print(df_normal.describe())
-# print("\nSPHERE")
-# _, df_sphere = show_stuff_sp(normal=False)
-# print(df_sphere.describe())
+                with open(f"CBDecisions/inst_results/final_results_cb_random_N10_K{K}_inst{i}.pickle", "rb") as handle:
+                    results[0][i] = pickle.load(handle)
+                with open(f"CBDecisions/inst_results/final_results_cb_suc_pred_ML[N10_K{K}_I{I}]_T[N10_K{K}]_L{L}_inst{i}.pickle", "rb") as handle:
+                    results[1][i] = pickle.load(handle)
+                insts.append(i)
+            except:
+                continue
+        # PLOT RESULTS OVER RUNTIME
+        t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 60*60+15, 15)])
+        num_grids = len(t_grid)
+        obj = []
+        for a in np.arange(num_algs):
+            obj.append(pd.DataFrame(index=t_grid, columns=insts, dtype=np.float))
+
+        for a in np.arange(num_algs):
+            for i in insts:
+                # random
+                theta_final = results[0][i]["theta"]
+                t_alg = np.zeros(num_grids)
+                for t, theta in results[a][i]["inc_thetas_t"].items():
+                    t_alg[t_grid > t] = theta/theta_final
+                obj[a][i] = t_alg
+
+            obj[a] = np.array(obj[a])
+            obj[a][obj[a] == 0] = np.nan
+
+        sn.set_style("whitegrid")
+        # plot results
+        for a in np.arange(num_algs):
+            avg_random = np.quantile(obj[a], 0.5, axis=1)
+            random_10 = np.quantile(obj[a], 0.1, axis=1)
+            random_90 = np.quantile(obj[a], 0.9, axis=1)
+            plt.fill_between(t_grid, random_10, random_90, alpha=0.5)
+            plt.plot(t_grid, avg_random, label=alg_types[a])
+
+        plt.ylim([0.85, 1.05])
+        plt.xlim([0, 31*60])
+        plt.xlabel("Runtime (sec)")
+        plt.ylabel("Relative Objective")
+        plt.legend(loc=3)
+        plt.savefig(f"plot_runtime_{save_name}_{len(insts)}")
+        plt.close()
+
+        # PLOT RESULTS OVER NODES
+        n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in insts])
+        n_grid = np.arange(0, n_grid_max + 10, 10)
+        # n_grid = np.arange(0, 1000+10, 10)
+        num_grids = len(n_grid)
+        obj = []
+        for a in np.arange(num_algs):
+            obj.append(pd.DataFrame(index=n_grid, columns=insts, dtype=np.float))
+
+        for a in np.arange(num_algs):
+            for i in insts:
+                # random
+                n_alg = np.zeros(num_grids)
+                theta_final = results[0][i]["theta"]
+                for n, theta in results[a][i]["inc_thetas_n"].items():
+                    n_alg[n_grid > n] = theta / theta_final
+                obj[a][i] = n_alg
+
+            obj[a] = np.array(obj[a])
+            obj[a][obj[a] == 0] = np.nan
+
+        sn.set_style("whitegrid")
+        # plot results
+        for a in np.arange(num_algs):
+            avg_random = np.quantile(obj[a], 0.5, axis=1)
+            random_10 = np.quantile(obj[a], 0.1, axis=1)
+            random_90 = np.quantile(obj[a], 0.9, axis=1)
+            plt.fill_between(n_grid, random_10, random_90, alpha=0.5)
+            plt.plot(n_grid, avg_random, label=alg_types[a])
+
+        plt.ylim([0.85, 1.05])
+        plt.xlabel("Nodes")
+        plt.ylabel("Relative Objective")
+        plt.legend(loc=3)
+        plt.savefig(f"plot_nodes_{save_name}_{len(insts)}")
+        plt.close()
+
+
+def plot_cb_random(K):
+    results = [{}, {}]
+    alg_types = ["Random", "Random Preprocess"]
+    num_inst = 112
+    num_algs = len(results)
+    insts = []
+    for i in np.arange(num_inst):
+        try:
+            with open(f"CBDecisions/inst_results/final_results_cb_random_N10_K{K}_inst{i}.pickle", "rb") as handle:
+                results[0][i] = pickle.load(handle)
+            with open(f"CBDecisions/inst_results/final_results_cb_random_C[preproc]_N10_K{K}_inst{i}.pickle", "rb") as handle:
+                results[1][i] = pickle.load(handle)
+            insts.append(i)
+        except:
+            continue
+    # PLOT RESULTS OVER RUNTIME
+    t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 60*60+15, 15)])
+    num_grids = len(t_grid)
+    obj = []
+    for a in np.arange(num_algs):
+        obj.append(pd.DataFrame(index=t_grid, columns=insts, dtype=np.float))
+
+    for a in np.arange(num_algs):
+        for i in insts:
+            # random
+            theta_final = results[0][i]["theta"]
+            t_alg = np.zeros(num_grids)
+            for t, theta in results[a][i]["inc_thetas_t"].items():
+                t_alg[t_grid > t] = theta/theta_final
+            obj[a][i] = t_alg
+
+        obj[a] = np.array(obj[a])
+        obj[a][obj[a] == 0] = np.nan
+
+    sn.set_style("whitegrid")
+    # plot results
+    for a in np.arange(num_algs):
+        avg_random = np.quantile(obj[a], 0.5, axis=1)
+        random_10 = np.quantile(obj[a], 0.1, axis=1)
+        random_90 = np.quantile(obj[a], 0.9, axis=1)
+        plt.fill_between(t_grid, random_10, random_90, alpha=0.5)
+        plt.plot(t_grid, avg_random, label=alg_types[a])
+
+    plt.ylim([0.8, 1.05])
+    plt.xlim([0, 31*60])
+    plt.xlabel("Runtime (sec)")
+    plt.ylabel("Relative Objective")
+    plt.legend(loc=3)
+    plt.savefig(f"plot_runtime_cb_random_C[PREPROC]_T[N10_K{K}]_{len(insts)}")
+    plt.close()
+
+
+plot_cb_level(4, 500)
