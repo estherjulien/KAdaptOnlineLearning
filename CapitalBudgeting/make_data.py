@@ -18,7 +18,7 @@ if __name__ == "__main__":
     att_series = ["coords", "obj_stat", "y_stat", "obj_det", "x_det", "y_det", "slack", "const_to_z_dist",
                   "const_to_const_dist"]
 
-    problem_type = f"cb_C[NEW]_N{N}_K{K}_m{time_limit}"
+    problem_type = f"cb_N{N}_K{K}_m{time_limit}"
 
     for i in np.arange((array_num - 1)*num_instances, array_num*num_instances):
         env = ProjectsInstance(N=N, inst_num=i)

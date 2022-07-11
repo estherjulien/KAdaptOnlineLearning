@@ -1,5 +1,5 @@
-from ShortestPathCluster.ProblemFunctions.att_functions_high import *
-from ShortestPathCluster.ProblemFunctions.functions_milp import *
+from ProblemFunctions.att_functions_high import *
+from ProblemFunctions.functions_milp import *
 
 from tensorflow.keras.models import load_model
 from datetime import datetime
@@ -11,7 +11,7 @@ import time
 
 
 def algorithm(K, env, att_series=None, max_level=5, success_model_name=None, time_limit=30 * 60, print_info=True,
-              problem_type="test", thresh=None, num_runs=5):
+              problem_type="test", thresh=None, num_runs=2):
     if att_series is None:
         att_series = ["coords", "obj_det", "y_det", "slack", "const_to_z_dist", "const_to_const_dist"]
     # Initialize

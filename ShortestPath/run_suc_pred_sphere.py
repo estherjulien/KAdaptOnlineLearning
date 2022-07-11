@@ -7,20 +7,19 @@ if __name__ == "__main__":
     i = int(sys.argv[1])
     N = int(sys.argv[2])
     K = int(sys.argv[3])
-    max_level = int(sys.argv[4])
-    thresh = int(sys.argv[5])
+    K_ML = int(sys.argv[4])
+    max_level = int(sys.argv[5])
+    minutes = int(sys.argv[6])
+    ct = int(sys.argv[7])
+    nodes = int(sys.argv[8])
 
     # load environment
     with open(f"ShortestPath/Data/Instances/inst_results/sp_env_sphere_N{N}_{i}.pickle", "rb") as handle:
         env = pickle.load(handle)
 
-    # success_model_name = f"ShortestPathCluster/Data/Models/rf_class_sp_p5_N10_K4_ct70_all.joblib"
+    success_model_name = f"ShortestPath/Data/Models/rf_class_sp_sphere_N20_K{K_ML}_min{minutes}_nodes{nodes}_ct{ct}_bal.joblib"
 
-    # run algorithm with threshold
-    if thresh:
-        problem_type = f"sp_suc_pred_thresh_N{N}_K{K}_L{max_level}"
-        algorithm(K, env, max_level=max_level, problem_type=problem_type, success_model_name=success_model_name, thresh=0.1)
-    else:
-        problem_type = f"sp_suc_pred_N{N}_K{K}_L{max_level}"
-        algorithm(K, env, max_level=max_level, problem_type=problem_type, success_model_name=success_model_name)
+    # run algorithm
+    problem_type = f"sp_sphere_suc_pred_ML[N20_K{K_ML}_m{minutes}_nodes{nodes}_ct{ct}]_T[N{N}_K{K}]_L{max_level}"
+    algorithm(K, env, max_level=max_level, problem_type=problem_type, success_model_name=success_model_name)
 

@@ -101,15 +101,15 @@ def plot_stuff(K, N, num_inst, level=30, thresh=False, ml_model_type=None):
     plt.close()
 
 
-def plot_random(problem_type, K, N, num_inst, gamma=None, degree=None, tap=None):
+def plot_sp_random(K, N):
     results = [{}]
+    num_inst = 112
     alg_types = ["Random"]
     num_algs = len(results)
     insts = []
     for i in np.arange(num_inst):
         try:
-            with open(f"SPShereResults/inst_results/final_results_sp_random_sphere_N{N}_d{degree}_tap{tap}_g{gamma}"
-                      f"_K{K}_inst{i}.pickle", "rb") as handle:
+            with open(f"SPDecisions/random/final_results_sp_random_sphere_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
                 results[0][i] = pickle.load(handle)
             if results[0][i]["theta"] > 1000:
                 continue
@@ -147,42 +147,7 @@ def plot_random(problem_type, K, N, num_inst, gamma=None, degree=None, tap=None)
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Relative Objective")
     plt.legend(loc=1)
-    plt.savefig(f"plot_runtime_{problem_type}_nt_K{K}_N{N}_d{degree}_tap{tap}_g{gamma}_{len(insts)}")
-    plt.close()
-
-    # PLOT RESULTS OVER NODES
-    n_grid_max = np.max([results[0][i]["tot_nodes"] for i in insts])
-    n_grid = np.arange(0, n_grid_max+10, 10)
-    num_grids = len(n_grid)
-    obj = []
-    for a in np.arange(num_algs):
-        obj.append(pd.DataFrame(index=n_grid, columns=insts, dtype=np.float))
-
-    for a in np.arange(num_algs):
-        for i in insts:
-            # random
-            n_alg = np.zeros(num_grids)
-            theta_final = results[0][i]["theta"]
-            for n, theta in results[a][i]["inc_thetas_n"].items():
-                n_alg[n_grid > n] = theta/theta_final
-            obj[a][i] = n_alg
-
-        obj[a] = np.array(obj[a])
-        obj[a][obj[a] == 0] = np.nan
-
-    sn.set_style("whitegrid")
-    # plot results
-    for a in np.arange(num_algs):
-        avg_random = np.quantile(obj[a], 0.5, axis=1)
-        random_10 = np.quantile(obj[a], 0.1, axis=1)
-        random_90 = np.quantile(obj[a], 0.9, axis=1)
-        plt.fill_between(n_grid, random_10, random_90, alpha=0.5)
-        plt.plot(n_grid, avg_random, label=alg_types[a])
-
-    plt.xlabel("Nodes")
-    plt.ylabel("Relative Objective")
-    plt.legend(loc=1)
-    plt.savefig(f"plot_nodes_{problem_type}_nt_K{K}_N{N}_d{degree}_tap{tap}_g{gamma}_{len(insts)}")
+    plt.savefig(f"plot_runtime_sp_sphere_K{K}_N{N}_{len(insts)}")
     plt.close()
     return results[0]
 
@@ -291,7 +256,7 @@ def diff_sp_normal_random():
 def diff_sp_sphere_random():
     num_instances = 112
     K_list = [2, 3, 4, 5, 6]
-    N_list = [20, 40, 60]
+    N_list = [10, 20, 40, 60]
     results = pd.DataFrame(index=N_list, columns=K_list, dtype=float)
     insts = pd.DataFrame(0, index=N_list, columns=K_list, dtype=int)
     for K in K_list:
@@ -299,7 +264,7 @@ def diff_sp_sphere_random():
             for i in np.arange(num_instances):
                 diff = []
                 try:
-                    with open(f"ShortestPath/Data/Results/Decisions/inst_results/final_results_sp_random_sphere_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
+                    with open(f"SPDecisions/random/final_results_sp_random_sphere_N{N}_K{K}_inst{i}.pickle", "rb") as handle:
                         res = pickle.load(handle)
                     insts.loc[N, K] += 1
                 except FileNotFoundError:
@@ -323,7 +288,7 @@ def plot_diff_random(cb=False, sp_normal=False, sp_sphere=False):
         save_name = "sp_sphere"
     sn.set()
     sn.color_palette("rocket", as_cmap=True)
-    fig, ax = plt.subplots(figsize=(10,5))
+    fig, ax = plt.subplots(figsize=(8, 10))
 
     results.plot(style='o-', ax=ax)
     plt.xticks(N_list)
@@ -331,7 +296,30 @@ def plot_diff_random(cb=False, sp_normal=False, sp_sphere=False):
     plt.xlabel("Instance size ($N$)", fontsize=15)
     plt.ylabel("Total increase of objective ($\%$)", fontsize=15)
     plt.savefig("bla_diff_test")
-    plt.savefig(f"diff_results_{save_name}.pdf", dpi=400)
+    plt.savefig(f"NEW_diff_results_{save_name}.pdf", dpi=400)
+
+
+def plot_diff_random_bars(cb=False, sp_normal=False, sp_sphere=False):
+    if cb:
+        results, _, N_list, K_list = diff_cb_random()
+        save_name = "cb"
+    elif sp_normal:
+        results, _, N_list, K_list = diff_sp_normal_random()
+        save_name = "sp_normal"
+    elif sp_sphere:
+        results, _, N_list, K_list = diff_sp_sphere_random()
+        save_name = "sp_sphere"
+    sn.set()
+    sn.color_palette("rocket", as_cmap=True)
+    fig, ax = plt.subplots(figsize=(8, 10))
+
+    results.transpose().plot.bar(ax=ax)
+    plt.legend(title="Instance size ($N$)")
+    plt.xlabel("K", fontsize=15)
+    plt.xticks(rotation=0)
+    plt.ylabel("Total increase of objective ($\%$)", fontsize=15)
+    plt.savefig("bla_diff_test")
+    plt.savefig(f"NEW_diff_results_{save_name}.pdf", dpi=400)
 
 
 def plot_cb_level(K, I):
@@ -477,4 +465,320 @@ def plot_cb_random(K):
     plt.close()
 
 
-plot_cb_level(4, 500)
+def plot_cb_level_ct(K, minutes, nodes, KML=None):
+    if KML is None:
+        KML = K
+    results = [{}, {}]
+    alg_types = ["Random", "Success Prediction"]
+    num_inst = 112
+    num_algs = len(results)
+    for ct in [5]:
+        for L in [40]:
+            save_name = f"cb_ML[N10_K{KML}_m{minutes}_nodes{nodes}_ct{ct}]_T[N10_K{K}]_L{L}"
+            insts = []
+            for i in np.arange(num_inst):
+                try:
+                    with open(f"CBDecisions/random/final_results_cb_random_N10_K{K}_inst{i}.pickle",
+                              "rb") as handle:
+                        results[0][i] = pickle.load(handle)
+                    with open(
+                            f"CBDecisions/inst_results/final_results_cb_suc_pred_ML[N10_K{KML}_m{minutes}_nodes{nodes}_"
+                            f"ct{ct}]_T[N10_K{K}]_L{L}_inst{i}.pickle",
+                            "rb") as handle:
+                        results[1][i] = pickle.load(handle)
+                    insts.append(i)
+                except FileNotFoundError:
+                    continue
+            # PLOT RESULTS OVER RUNTIME
+            t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 60 * 60 + 15, 15)])
+            num_grids = len(t_grid)
+            obj = []
+            for a in np.arange(num_algs):
+                obj.append(pd.DataFrame(index=t_grid, columns=insts, dtype=np.float))
+
+            for a in np.arange(num_algs):
+                for i in insts:
+                    # random
+                    theta_final = results[0][i]["theta"]
+                    t_alg = np.zeros(num_grids)
+                    for t, theta in results[a][i]["inc_thetas_t"].items():
+                        t_alg[t_grid > t] = theta / theta_final
+                    obj[a][i] = t_alg
+
+                obj[a] = np.array(obj[a])
+                obj[a][obj[a] == 0] = np.nan
+
+            sn.set_style("whitegrid")
+            # plot results
+            try:
+                for a in np.arange(num_algs):
+                    avg_random = np.quantile(obj[a], 0.5, axis=1)
+                    random_10 = np.quantile(obj[a], 0.1, axis=1)
+                    random_90 = np.quantile(obj[a], 0.9, axis=1)
+                    plt.fill_between(t_grid, random_10, random_90, alpha=0.5)
+                    plt.plot(t_grid, avg_random, label=alg_types[a])
+            except:
+                continue
+            plt.ylim([0.85, 1.05])
+            # plt.xlim([0, 31 * 60])
+            plt.xlim([0, 200])
+            plt.xlabel("Runtime (sec)")
+            plt.ylabel("Relative Objective")
+            plt.legend(loc=3)
+            plt.savefig(f"plot_runtime_{save_name}_{len(insts)}")
+            plt.close()
+
+            # PLOT RESULTS OVER NODES
+            n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in insts])
+            n_grid = np.arange(0, n_grid_max + 10, 10)
+            # n_grid = np.arange(0, 1000+10, 10)
+            num_grids = len(n_grid)
+            obj = []
+            for a in np.arange(num_algs):
+                obj.append(pd.DataFrame(index=n_grid, columns=insts, dtype=np.float))
+
+            for a in np.arange(num_algs):
+                for i in insts:
+                    # random
+                    n_alg = np.zeros(num_grids)
+                    theta_final = results[0][i]["theta"]
+                    for n, theta in results[a][i]["inc_thetas_n"].items():
+                        n_alg[n_grid > n] = theta / theta_final
+                    obj[a][i] = n_alg
+
+                obj[a] = np.array(obj[a])
+                obj[a][obj[a] == 0] = np.nan
+
+            sn.set_style("whitegrid")
+            # plot results
+            for a in np.arange(num_algs):
+                avg_random = np.quantile(obj[a], 0.5, axis=1)
+                random_10 = np.quantile(obj[a], 0.1, axis=1)
+                random_90 = np.quantile(obj[a], 0.9, axis=1)
+                plt.fill_between(n_grid, random_10, random_90, alpha=0.5)
+                plt.plot(n_grid, avg_random, label=alg_types[a])
+
+            # plt.ylim([0.85, 1.05])
+            plt.xlim([0, 1500])
+            plt.xlabel("Nodes")
+            plt.ylabel("Relative Objective")
+            plt.legend(loc=3)
+            plt.savefig(f"plot_nodes_{save_name}_{len(insts)}")
+            plt.close()
+
+
+def plot_cb_level_all(K):
+    results = [{}, {}]
+    alg_types = ["Random", "Success Prediction"]
+    num_inst = 112
+    num_algs = len(results)
+    ct = 5
+    nodes = 2
+    if K == 6:
+        minutes = 10
+    elif K == 2:
+        minutes = 2
+    else:
+        minutes = 5
+
+    for L in [40]:
+        save_name = f"cb_ML[N10_K{K}_m{minutes}_nodes{nodes}_ct{ct}]_T[N10_K{K}]_L{L}"
+        insts = []
+        for i in np.arange(num_inst):
+            try:
+                with open(f"CBDecisions/random/final_results_cb_random_N10_K{K}_inst{i}.pickle",
+                          "rb") as handle:
+                    results[0][i] = pickle.load(handle)
+                with open(
+                        f"CBDecisions/inst_results/final_results_cb_suc_pred_ML[N10_K{K}_m{minutes}_nodes{nodes}_"
+                        f"ct{ct}]_T[N10_K{K}]_L{L}_inst{i}.pickle",
+                        "rb") as handle:
+                    results[1][i] = pickle.load(handle)
+                insts.append(i)
+            except FileNotFoundError:
+                continue
+        # PLOT RESULTS OVER RUNTIME
+        t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 60 * 60 + 15, 15)])
+        num_grids = len(t_grid)
+        obj = []
+        for a in np.arange(num_algs):
+            obj.append(pd.DataFrame(index=t_grid, columns=insts, dtype=np.float))
+
+        for a in np.arange(num_algs):
+            for i in insts:
+                # random
+                theta_final = results[0][i]["theta"]
+                t_alg = np.zeros(num_grids)
+                for t, theta in results[a][i]["inc_thetas_t"].items():
+                    t_alg[t_grid > t] = theta / theta_final
+                obj[a][i] = t_alg
+
+            obj[a] = np.array(obj[a])
+            obj[a][obj[a] == 0] = np.nan
+
+        sn.set_style("whitegrid")
+        # plot results
+        try:
+            for a in np.arange(num_algs):
+                avg_random = np.quantile(obj[a], 0.5, axis=1)
+                random_10 = np.quantile(obj[a], 0.1, axis=1)
+                random_90 = np.quantile(obj[a], 0.9, axis=1)
+                plt.fill_between(t_grid, random_10, random_90, alpha=0.5)
+                plt.plot(t_grid, avg_random, label=alg_types[a])
+        except:
+            continue
+        plt.ylim([0.85, 1.05])
+        # plt.xlim([0, 31 * 60])
+        plt.xlim([0, 200])
+        plt.xlabel("Runtime (sec)")
+        plt.ylabel("Relative Objective")
+        plt.legend(loc=3)
+        plt.savefig(f"plot_runtime_{save_name}_{len(insts)}")
+        plt.close()
+
+        # PLOT RESULTS OVER NODES
+        n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in insts])
+        n_grid = np.arange(0, n_grid_max + 10, 10)
+        # n_grid = np.arange(0, 1000+10, 10)
+        num_grids = len(n_grid)
+        obj = []
+        for a in np.arange(num_algs):
+            obj.append(pd.DataFrame(index=n_grid, columns=insts, dtype=np.float))
+
+        for a in np.arange(num_algs):
+            for i in insts:
+                # random
+                n_alg = np.zeros(num_grids)
+                theta_final = results[0][i]["theta"]
+                for n, theta in results[a][i]["inc_thetas_n"].items():
+                    n_alg[n_grid > n] = theta / theta_final
+                obj[a][i] = n_alg
+
+            obj[a] = np.array(obj[a])
+            obj[a][obj[a] == 0] = np.nan
+
+        sn.set_style("whitegrid")
+        # plot results
+        for a in np.arange(num_algs):
+            avg_random = np.quantile(obj[a], 0.5, axis=1)
+            random_10 = np.quantile(obj[a], 0.1, axis=1)
+            random_90 = np.quantile(obj[a], 0.9, axis=1)
+            plt.fill_between(n_grid, random_10, random_90, alpha=0.5)
+            plt.plot(n_grid, avg_random, label=alg_types[a])
+
+        # plt.ylim([0.85, 1.05])
+        plt.xlim([0, 1500])
+        plt.xlabel("Nodes")
+        plt.ylabel("Relative Objective")
+        plt.legend(loc=3)
+        plt.savefig(f"plot_nodes_{save_name}_{len(insts)}")
+        plt.close()
+
+
+def plot_sp_level(nodes=2):
+    results = [{}, {}]
+    alg_types = ["Random", "Success Prediction"]
+    num_inst = 112
+    num_algs = len(results)
+    ct = 5
+    nodes = nodes
+    minutes = 15
+    N = 20
+
+    for K in [3, 4]:
+        for L in [40, 80, 120]:
+            save_name = f"sp_sphere_ML[N{N}_K{K}_m{minutes}_nodes{nodes}_ct{ct}]_T[N{N}_K{K}]_L{L}"
+            insts = []
+            for i in np.arange(num_inst):
+                try:
+                    with open(f"SPDecisions/random/final_results_sp_random_sphere_N{N}_K{K}_inst{i}.pickle",
+                              "rb") as handle:
+                        results[0][i] = pickle.load(handle)
+                    with open(
+                            f"SPDecisions/inst_results/final_results_sp_sphere_suc_pred_"
+                            f"ML[N{N}_K{K}_m{minutes}_nodes{nodes}_ct{ct}]_"
+                            f"T[N{N}_K{K}]_L{L}_inst{i}.pickle",
+                            "rb") as handle:
+                        results[1][i] = pickle.load(handle)
+                    insts.append(i)
+                except FileNotFoundError:
+                    continue
+            # PLOT RESULTS OVER RUNTIME
+            t_grid = np.array([*np.arange(0, 65, 5), *np.arange(60, 60 * 60 + 15, 15)])
+            num_grids = len(t_grid)
+            obj = []
+            for a in np.arange(num_algs):
+                obj.append(pd.DataFrame(index=t_grid, columns=insts, dtype=np.float))
+
+            for a in np.arange(num_algs):
+                for i in insts:
+                    # random
+                    theta_final = results[0][i]["theta"]
+                    t_alg = np.zeros(num_grids)
+                    for t, theta in results[a][i]["inc_thetas_t"].items():
+                        t_alg[t_grid > t] = theta / theta_final
+                    obj[a][i] = t_alg
+
+                obj[a] = np.array(obj[a])
+                obj[a][obj[a] == 0] = np.nan
+
+            sn.set_style("whitegrid")
+            # plot results
+            try:
+                for a in np.arange(num_algs):
+                    avg_random = np.quantile(obj[a], 0.5, axis=1)
+                    random_10 = np.quantile(obj[a], 0.1, axis=1)
+                    random_90 = np.quantile(obj[a], 0.9, axis=1)
+                    plt.fill_between(t_grid, random_10, random_90, alpha=0.5)
+                    plt.plot(t_grid, avg_random, label=alg_types[a])
+            except:
+                continue
+            plt.ylim([0.99, 1.04])
+            plt.xlim([0, 31 * 60])
+            plt.xlabel("Runtime (sec)")
+            plt.ylabel("Relative Objective")
+            plt.legend(loc=1)
+            plt.savefig(f"plot_runtime_{save_name}_{len(insts)}")
+            plt.close()
+
+            # PLOT RESULTS OVER NODES
+            n_grid_max = np.max([results[a][i]["tot_nodes"] for a in np.arange(num_algs) for i in insts])
+            n_grid = np.arange(0, n_grid_max + 10, 10)
+            # n_grid = np.arange(0, 1000+10, 10)
+            num_grids = len(n_grid)
+            obj = []
+            for a in np.arange(num_algs):
+                obj.append(pd.DataFrame(index=n_grid, columns=insts, dtype=np.float))
+
+            for a in np.arange(num_algs):
+                for i in insts:
+                    # random
+                    n_alg = np.zeros(num_grids)
+                    theta_final = results[0][i]["theta"]
+                    for n, theta in results[a][i]["inc_thetas_n"].items():
+                        n_alg[n_grid > n] = theta / theta_final
+                    obj[a][i] = n_alg
+
+                obj[a] = np.array(obj[a])
+                obj[a][obj[a] == 0] = np.nan
+
+            sn.set_style("whitegrid")
+            # plot results
+            for a in np.arange(num_algs):
+                avg_random = np.quantile(obj[a], 0.5, axis=1)
+                random_10 = np.quantile(obj[a], 0.1, axis=1)
+                random_90 = np.quantile(obj[a], 0.9, axis=1)
+                plt.fill_between(n_grid, random_10, random_90, alpha=0.5)
+                plt.plot(n_grid, avg_random, label=alg_types[a])
+
+            plt.ylim([0.99, 1.04])
+            # plt.xlim([0, 1500])
+            plt.xlabel("Nodes")
+            plt.ylabel("Relative Objective")
+            plt.legend(loc=1)
+            plt.savefig(f"plot_nodes_{save_name}_{len(insts)}")
+            plt.close()
+
+
+plot_sp_level(5)
+plot_sp_level(10)

@@ -1,5 +1,5 @@
 from ProblemFunctions.EnvSphere import Graph
-from Method.SucPredData import data_gen_fun
+from Method.SucPredDataNew import data_gen_fun
 
 import numpy as np
 import sys
@@ -16,8 +16,14 @@ if __name__ == "__main__":
 
     att_series = ["coords", "obj_det", "y_det", "slack", "const_to_z_dist", "const_to_const_dist"]
 
-    problem_type = f"sp_sphere_N{N}_K{K}"
+    problem_type = f"sp_sphere_N{N}_K{K}_m{time_limit}"
 
     for i in np.arange((array_num - 1)*num_instances, array_num*num_instances):
-        env = Graph(N=N, inst_num=i)
-        data_gen_fun(K, env, att_series=att_series, problem_type=problem_type, time_limit=time_limit*60)
+        finished = False
+        while not finished:
+            try:
+                env = Graph(N=N, inst_num=i)
+                data_gen_fun(K, env, att_series=att_series, problem_type=problem_type, time_limit=time_limit*60)
+                finished = True
+            except:
+                finished = False

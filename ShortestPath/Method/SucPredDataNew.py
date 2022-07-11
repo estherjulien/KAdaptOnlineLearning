@@ -31,6 +31,8 @@ def data_gen_fun(K, env, att_series, problem_type="test", time_limit=5*60, perc_
     # Initialize
     start_time = time.time()
 
+    # NO STATIC ATTRIBUTE
+
     # FILL ALL SUBSETS, store attribute information here!
     tau, tau_att, new_scen, theta_start, zeta_init = fill_subsets(K, env, att_series)
     if zeta_init < 1e-04:
@@ -42,7 +44,7 @@ def data_gen_fun(K, env, att_series, problem_type="test", time_limit=5*60, perc_
 
     att_index = att_index_maker(env, att_series)
     # CREATE SUBTREE
-    input_data_dict, success_data_dict, tau_dict, _, covered_nodes, level = make_upper_tree(K, env, att_series,
+    input_data_dict, success_data_dict, tau_dict, _, covered_nodes, level, starting_nodes = make_upper_tree(K, env, att_series,
                                                                                             tau, tau_att,
                                                                                             theta_init,
                                                                                             theta_start, zeta_init,
@@ -50,6 +52,7 @@ def data_gen_fun(K, env, att_series, problem_type="test", time_limit=5*60, perc_
                                                                                             max_depth=max_depth,
                                                                                             time_limit=time_limit,
                                                                                             rt_mean=rt_mean)
+
     if level < 2:
         print(f"Instance SPD {env.inst_num}: Each run takes too long, stop this instance")
         return None
@@ -61,7 +64,8 @@ def data_gen_fun(K, env, att_series, problem_type="test", time_limit=5*60, perc_
                                                                                               level=level,
                                                                                               time_limit=time_limit,
                                                                                               perc_label=perc_label,
-                                                                                              normalized=normalized)
+                                                                                              normalized=normalized,
+                                                                                              starting_nodes=starting_nodes)
     # make input and success data final
     input_data = []
     success_data = []
@@ -158,7 +162,7 @@ def fill_subsets(K, env, att_series):
     return tau, tau_att, xi, theta, zeta
 
 
-def init_scen(K, env, att_series, det_model,):
+def init_scen(K, env, att_series, det_model):
     tau = {k: [] for k in np.arange(K)}
     tau[0].append(env.init_uncertainty)
 
@@ -174,6 +178,7 @@ def init_scen(K, env, att_series, det_model,):
     tau_att = {k: [] for k in np.arange(K)}
 
     first_att_part, k_att_part = attribute_per_scen(K, xi_new, env, att_series, tau, theta, x, y, det_model=det_model)
+
     tau_att[0] = np.array(first_att_part + k_att_part[0]).reshape([1, -1])
     return tau, tau_att
 
@@ -185,7 +190,7 @@ def init_pass(K, env, tau):
     theta_init = np.mean([res[0] for res in init_results])
     tot_scens_init = np.mean([res[1] for res in init_results])
     rt_mean = np.mean([res[2] for res in init_results])
-    max_depth = np.max([res[1] for res in init_results])*1.1
+    max_depth = np.quantile([res[1] for res in init_results], 0.9)
 
     return theta_init, tot_scens_init, rt_mean, max_depth
 
@@ -249,7 +254,8 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_start, z
 
     # decide on maximum number of start nodes
     thread_count = multiprocessing.cpu_count()
-    start_nodes_max = (time_limit*thread_count)/(5*rt_mean)
+    start_nodes_max = int(np.floor((time_limit*thread_count)/(5*rt_mean)))
+
     # node information
     node_index = (0,)
 
@@ -264,14 +270,46 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_start, z
     zeta_dict = {(): zeta_init}
 
     # INITIAL MODEL
-    det_model = scenario_fun_deterministic_build(env)
     model = None
+
+    det_model = scenario_fun_deterministic_build(env)
+
     # CREATE UPPER TREE
+    last_level_done = False
+    prev_level_nodes = None
     while len(level_next):
-        node_index = list(level_next.keys())[0]
+        node_index = list(level_next)[0]
+        next_level_happened = False
         if len(node_index) + 2 not in covered_nodes:
+            if last_level_done:
+                if prev_level_nodes is None:
+                    # DETERMINE STARTING NODES
+                    last_level = list(covered_nodes)[-1]
+                    starting_nodes = []
+                    for node in covered_nodes[last_level]:
+                        if node in success_data_dict[last_level]:
+                            continue
+                        starting_nodes.append(node)
+                break
             covered_nodes[len(node_index) + 2] = []
             success_data_dict[len(node_index) + 2] = {}
+            next_level_happened = True
+
+        # TERMINATION CONSTRAINTS
+        if next_level_happened and len(list(level_next)[0]) + 2 >= np.ceil(max_depth):
+            last_level_done = True
+            print(f"max depth reached = {np.ceil(max_depth)}")
+
+        if next_level_happened and len(node_index) > 0 and (len(covered_nodes[len(node_index) + 1]) -
+                                                            len(success_data_dict[len(node_index) + 1]))*K > start_nodes_max:     # and len(covered_nodes[len(new_node_index)]) * K > start_nodes_max:
+            last_level_done = True
+            last_level = len(node_index) + 2
+            prev_level_nodes = covered_nodes[last_level - 1]
+            num_from_prev_level = int(np.ceil((len(prev_level_nodes)*K - start_nodes_max)/(1-1/K)/K))
+            random_ind = np.random.choice(len(prev_level_nodes), int(num_from_prev_level), replace=False)
+            prev_level_nodes = {tuple(node) for node in np.array(prev_level_nodes)[random_ind]}
+            starting_nodes = []
+
         while len(level_next[node_index]):
             k_new = level_next[node_index][0]
             level_next[node_index] = level_next[node_index][1:]
@@ -288,18 +326,31 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_start, z
 
             # SUBPROBLEM
             zeta, xi = separation_fun(K, x, y, theta, env, tau)
-            scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, det_model=det_model)
 
             # check if robust
             if zeta < 1e-04:
                 success_data_dict[len(new_node_index)][new_node_index] = theta
+                if prev_level_nodes is not None and new_node_index not in prev_level_nodes and len(prev_level_nodes):
+                    random_choice = np.random.choice(len(prev_level_nodes))
+                    random_prev_node = tuple(np.array(list(prev_level_nodes))[random_choice])
+                    prev_level_nodes.remove(random_prev_node)
                 continue
+
+            # CHECK IF WE NEED TO GET THE NEXT NODE (FOR LAST LEVEL)
+            if prev_level_nodes is not None:
+                if new_node_index not in prev_level_nodes:
+                    starting_nodes += [new_node_index + (k,) for k in np.arange(K)]
+                else:
+                    starting_nodes.append(new_node_index)
+                    prev_level_nodes.remove(new_node_index)
+                    continue
 
             # STATE DATA
             K_set = np.arange(K)
             tot_scens = np.sum([len(t) for t in tau.values()])
             tau_s = state_features(theta, zeta, tot_scens, tot_scens_init, theta_init, zeta_init,
                                    theta_dict[node_index], zeta_dict[node_index])
+            scen_att, scen_att_k = attribute_per_scen(K, xi, env, att_series, tau, theta, x, y, det_model=det_model)
 
             # INPUT DATA
             new_input_data = input_fun(K, tau_s, tau_att, scen_att, scen_att_k, att_index)
@@ -335,60 +386,23 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_start, z
         # after each set of children
         del level_next[node_index]
 
-        # TERMINATION CONSTRAINTS
-        if len(covered_nodes[len(new_node_index) + 1]) > start_nodes_max:
-            # delete all data and covered data of last level
-            last_level = len(new_node_index) + 1
-            nodes_to_del = []
-            for node in input_data_dict.keys():
-                if len(node) == last_level:
-                    nodes_to_del.append(node)
-            for node in nodes_to_del:
-                del input_data_dict[node]
-            del covered_nodes[last_level]
-            del success_data_dict[last_level]
-            break
-        elif len(list(level_next)[0]) > max_depth:
-            break
+    # find starting nodes
     level = list(covered_nodes.keys())[-1]
     runtime = time.time() - start_time
 
-    return input_data_dict, success_data_dict, tau_dict, runtime, covered_nodes, level
+    return input_data_dict, success_data_dict, tau_dict, runtime, covered_nodes, level, starting_nodes
 
 
-def random_runs_from_nodes(K, env, tau_dict, success_data_dict, covered_nodes, level, time_limit=5*60,
+def random_runs_from_nodes(K, env, tau_dict, success_data_dict, covered_nodes, starting_nodes, level, time_limit=5*60,
                            perc_label=0.05, normalized=False):
-    # find starting nodes
-    starting_nodes = []
-    for node in covered_nodes[level]:
-        if node in success_data_dict[level]:
-            continue
-        starting_nodes.append(node)
-
     # actual time per node
     thread_count = multiprocessing.cpu_count()
     time_per_node = (time_limit*thread_count)/len(starting_nodes)
 
     print(f"Instance SPD {env.inst_num}: K = {K}, N = {env.N}, level = {level}, "
           f"{len(starting_nodes)} starting nodes, each {np.round(time_per_node, 3)}s")
-    if len(starting_nodes) < thread_count:
-        cores_per_start = thread_count/len(starting_nodes)
-        # cores_per_start = 2
-        divide_starting_nodes = []
-        cores_together = {n: [] for n in starting_nodes}
-        core_num = 0
-        for n in starting_nodes:
-            for rep in np.arange(cores_per_start):
-                divide_starting_nodes.append(n)
-                cores_together[n].append(core_num)
-                core_num += 1
-        thetas = Parallel(n_jobs=-1)(delayed(starting_nodes_pass)(K, env, tau_dict[n], time_limit)
-                                     for n in divide_starting_nodes)
-        shared_over_nodes = True
-    else:
-        thetas = Parallel(n_jobs=-1)(delayed(starting_nodes_pass)(K, env, tau_dict[n], time_per_node)
+    thetas = Parallel(n_jobs=-1)(delayed(starting_nodes_pass)(K, env, tau_dict[n], time_per_node)
                                      for n in starting_nodes)
-        shared_over_nodes = False
 
     # find best perc_label percent.
     all_thetas = np.array([t for t_list in thetas for t in t_list])
@@ -403,20 +417,12 @@ def random_runs_from_nodes(K, env, tau_dict, success_data_dict, covered_nodes, l
 
     num_runs = []
     for i, node in enumerate(starting_nodes):
-        if shared_over_nodes:
-            thetas_starting_node = np.array([t for j in cores_together[node] for t in thetas[j]])
-            num_runs.append(len(thetas_starting_node))
-            if len(thetas_starting_node) == 0:
-                success_data_dict[level][node] = 0
-                continue
-        elif not shared_over_nodes and len(thetas[i]):
-            num_runs.append(len(thetas[i]))
-            thetas_starting_node = np.array(thetas[i])
+        num_runs.append(len(thetas[i]))
+        if len(thetas[i]):
+            # success predictions of starting nodes
+            success_data_dict[len(node)][node] = np.sum(np.array(thetas[i]) < theta_compete)/len(thetas[i])
         else:
-            success_data_dict[level][node] = 0
-            continue
-        # success predictions of starting nodes
-        success_data_dict[level][node] = np.sum(thetas_starting_node < theta_compete)/len(thetas_starting_node)
+            success_data_dict[len(node)][node] = 0
 
     # get success predictions of other nodes in upper tree
     success_data_dict = finish_success(K, success_data_dict, covered_nodes, level, normalized=normalized)

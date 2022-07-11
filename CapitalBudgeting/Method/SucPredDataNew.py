@@ -294,10 +294,23 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_start, z
         next_level_happened = False
         if len(node_index) + 2 not in covered_nodes:
             if last_level_done:
+                if prev_level_nodes is None:
+                    # DETERMINE STARTING NODES
+                    last_level = list(covered_nodes)[-1]
+                    starting_nodes = []
+                    for node in covered_nodes[last_level]:
+                        if node in success_data_dict[last_level]:
+                            continue
+                        starting_nodes.append(node)
                 break
             covered_nodes[len(node_index) + 2] = []
             success_data_dict[len(node_index) + 2] = {}
             next_level_happened = True
+
+        # TERMINATION CONSTRAINTS
+        if next_level_happened and len(list(level_next)[0]) + 2 >= np.ceil(max_depth):
+            last_level_done = True
+            print(f"max depth reached = {np.ceil(max_depth)}")
 
         if next_level_happened and len(node_index) > 0 and (len(covered_nodes[len(node_index) + 1]) -
                                                             len(success_data_dict[len(node_index) + 1]))*K > start_nodes_max:     # and len(covered_nodes[len(new_node_index)]) * K > start_nodes_max:
@@ -385,16 +398,6 @@ def make_upper_tree(K, env, att_series, tau, tau_att, theta_init, theta_start, z
         # after each set of children
         del level_next[node_index]
 
-        # TERMINATION CONSTRAINTS
-        if len(list(level_next)[0]) > max_depth:
-            # DETERMINE STARTING NODES
-            last_level = len(list(level_next)[0])
-            starting_nodes = []
-            for node in covered_nodes[last_level]:
-                if node in success_data_dict[last_level]:
-                    continue
-                starting_nodes.append(node)
-            break
     # find starting nodes
     level = list(covered_nodes.keys())[-1]
     runtime = time.time() - start_time
